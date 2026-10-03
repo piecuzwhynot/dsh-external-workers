@@ -237,6 +237,65 @@ Kimi、通义千问、Grok、豆包、本地模型、下个月才出的 CLI，�
 报出来（哪一项、违反了哪条规则）。支持一个新 CLI 的成本就是配置文件里那几行 ——
 懒得写就直接叫 DSH 帮你写：它能读那个 CLI 的 `--help` 然后把 recipe 填好。
 
+#### 不只是 CLI：**只有 API** 的模型也能加
+
+上面那个例子驱动的是一个 CLI。如果一个产品**只提供 HTTP API**、没有命令行，那它就没有"命令"可跑 ——
+所以插件自带了一个：[`examples/api-lane.mjs`](examples/api-lane.mjs) 把 OpenAI 兼容的接口变成一条泳道。
+这个形状覆盖的远不止 OpenAI —— xAI（Grok）、Moonshot（Kimi）、DashScope 的兼容模式（千问）、
+火山方舟（豆包）、以及大多数本地推理服务，说的都是这套协议。
+
+```json
+"products": {
+  "grok": {
+    "label": "Grok (xAI API)",
+    "bin": { "names": ["node.exe", "node"], "roots": [] },
+    "args": {
+      "base":   ["<插件目录>/examples/api-lane.mjs", "--history-dir", "{cwd}/.api-history"],
+      "prompt": ["-p", "{prompt}"],
+      "resume": ["--resume", "{session}"],
+      "model":  ["--model", "{model}"]
+    },
+    "output": { "format": "json", "session": "session_id", "text": "result", "model": "model" }
+  }
+}
+```
+
+密钥**不写进** `config.json`：脚本从环境变量读 `API_LANE_API_KEY`（或者 `--key-file <路径>`），
+base URL 和默认模型是同一个地方的 `API_LANE_BASE_URL`、`API_LANE_MODEL`。
+
+这么做换来两件事，也有一件做不到：
+
+- **它能迭代。** 脚本按会话把对话存在磁盘上，`--resume` 时把整段 thread 一起发过去 ——
+  后续任务建立在它已经看过的一切之上，跟 CLI 泳道一模一样。普通的"每次调一次 API"包装器
+  每次只发一条消息；这一点有测试专门盯着，退化了就会红。
+- **任务包会被内联进去。** 桥平常是叫 worker 去读 `jobs/<id>/packet.md`，而纯 API 模型**没有文件工具**，
+  所以脚本会读那个 packet 并跟提示词一起发出去，还会告诉模型它没有工具。
+- **但 API 模型一个工具都没有。** 它读不了你的代码、跑不了你的测试、也写不出文件到 `jobs/<id>/out/`。
+  它只能用文字回答，答案本身就是交付物。如果你要的是一个**真的会在你项目里动手**的 worker，
+  那就用带真 CLI 的产品 —— API 泳道适合提问、评审、起草和思考，不适合碰文件。
+
+### 泳道比普通 subagent 强在哪
+
+DSH 内置的 subagent 缝是**设计成一次性的** —— 新进程、新 thread、跑一轮就结束。
+官方 provider 的 README 写得很直白：*"no continuation, resume, pooling, progress stream, or
+product-session persistence."* 每次调用都从零开始，所以你得每次重新交代一遍背景，
+而它上一轮学到的东西已经没了。
+
+泳道正相反：**一个会迭代的 worker。**
+
+| | 普通 subagent | 泳道（lane） |
+|---|---|---|
+| 记得什么 | 什么都不记得，每次从零开始 | 它自己的会话，跨调用保留 |
+| 接着做 | 整个任务重讲一遍 | 「接着做，但这次改成 X」 |
+| 模型 | 一次调用一个模型 | 一条泳道一个模型，一个产品可以好几条泳道 |
+| 失败了 | 这一轮就没了 | 作业在磁盘上：能读、能续、能重试 |
+| 你的 chat 被压缩 | subagent 那次调用没了 | worker 会话和它的作业毫发无损 |
+| 工作目录 | 调用方的 | 它自己的，按泳道分 |
+| 谁在跑模型 | 你的 DSH 进程发请求 | 那个产品自己的 agent，用你自己的订阅 |
+
+实际的差别是：subagent 是**你问的一个问题**；泳道是你**招来的一个同事** ——
+交代一次，之后可以一直把同一个活的下一段交给它，而它还记得第一段。
+
 ### 额度和 credits（Codex）
 
 `delegate_gpt` 每次派活**之前**都会先读 Codex 自己记的用量，所以它能在**开工之前**拦住会撞墙的任务：

@@ -140,6 +140,45 @@ every delegation in that lane starts a fresh conversation. That is not an error,
 difference between a worker that remembers yesterday and one that does not — check `output.session`
 or `output.sessionPattern` first.
 
+#### If the product has no CLI, only an API
+
+Some models are reachable only over HTTP. `examples/api-lane.mjs` (shipped with the plugin) turns an
+OpenAI-compatible endpoint into a lane, which covers xAI (Grok), Moonshot (Kimi), DashScope's compatible
+mode (Qwen), Volcengine Ark (Doubao) and most local servers:
+
+```json
+"grok": {
+  "label": "Grok (xAI API)",
+  "bin": { "names": ["node.exe", "node"], "roots": [] },
+  "args": {
+    "base":   ["<plugin>/examples/api-lane.mjs", "--history-dir", "{cwd}/.api-history"],
+    "prompt": ["-p", "{prompt}"],
+    "resume": ["--resume", "{session}"],
+    "model":  ["--model", "{model}"]
+  },
+  "output": { "format": "json", "session": "session_id", "text": "result", "model": "model" }
+}
+```
+
+Set `API_LANE_API_KEY` (and optionally `API_LANE_BASE_URL`, `API_LANE_MODEL`) in the environment that
+runs `dsh web`, or pass `--key-file` inside `args.base`. The key never goes into `config.json`.
+
+- The script **keeps the conversation per session on disk**, so `--resume` sends the whole thread and a
+  follow-up builds on everything the worker already saw. That continuity is the entire point of a lane.
+- It **inlines the packet** (`jobs/<id>/packet.md`), because an API model has no file tools to read it.
+- It still has **no file tools at all**: it cannot read your repo, run your tests, or write into
+  `jobs/<id>/out/`. Its answer in text is the deliverable. When the work has to touch files, use a real
+  CLI product instead.
+
+#### Why not just a subagent
+
+Because a subagent is one-shot and a lane iterates. DSH's subagent seam opens a fresh thread on every
+call and keeps none of it — the provider's own README says so ("no continuation, resume, pooling,
+progress stream, or product-session persistence"). You re-brief the model each time, and everything it
+learned last call is gone. A lane keeps its own session, its own directory and a durable job record, so
+"continue, but do X instead" is a real instruction, a blocked job is resumed instead of redone, and
+compacting your chat does not touch the worker at all.
+
 ### 2.4 Quota and credits (why a gpt delegation sometimes stops to ask)
 
 `delegate_gpt` checks Codex's own usage records **before** it starts anything. Two different things can

@@ -258,6 +258,68 @@ A recipe is data, so it is validated, not trusted: a broken one is reported at p
 supporting a new CLI — and if you would rather not write it, ask the DSH agent to: it can read the
 CLI's `--help` and fill the recipe in for you.
 
+#### Not only CLI products: API-only models too
+
+The example above drives a CLI. A product that offers **only an HTTP API** has no command to run, so
+the plugin ships one: [`examples/api-lane.mjs`](examples/api-lane.mjs) turns an OpenAI-compatible
+endpoint into a lane. That shape covers far more than OpenAI — xAI (Grok), Moonshot (Kimi), DashScope's
+compatible mode (Qwen), Volcengine Ark (Doubao) and most local servers all speak it.
+
+```json
+"products": {
+  "grok": {
+    "label": "Grok (xAI API)",
+    "bin": { "names": ["node.exe", "node"], "roots": [] },
+    "args": {
+      "base":   ["<plugin>/examples/api-lane.mjs", "--history-dir", "{cwd}/.api-history"],
+      "prompt": ["-p", "{prompt}"],
+      "resume": ["--resume", "{session}"],
+      "model":  ["--model", "{model}"]
+    },
+    "output": { "format": "json", "session": "session_id", "text": "result", "model": "model" }
+  }
+}
+```
+
+The key never goes in `config.json`: the script reads `API_LANE_API_KEY` from the environment (or
+`--key-file <path>`), with `API_LANE_BASE_URL` and `API_LANE_MODEL` alongside it.
+
+Two things this buys you, and one it does not:
+
+- **It iterates.** The script keeps the conversation on disk per session, so `--resume` sends the whole
+  thread back — a follow-up builds on everything the worker already saw, exactly like a CLI lane. A
+  plain "call the API once" wrapper would send one message every time; there is a test that fails if
+  that regresses.
+- **The packet is inlined.** The bridge normally tells a worker to read `jobs/<id>/packet.md`. A raw API
+  model has no file tools, so the script reads that packet and sends it with the prompt, and says so.
+- **But an API model has no tools at all.** It cannot read your repo, run your tests, or write files
+  into `jobs/<id>/out/`. It answers in text, and the answer is the deliverable. If you need a worker
+  that actually *does* things in your project, use a product with a real CLI — the API lane is for
+  asking, reviewing, drafting and thinking, not for touching files.
+
+### Why a lane beats a plain subagent
+
+DSH's built-in subagent seam is **one-shot by design** — a fresh process, a fresh thread, one turn. The
+upstream provider README says it plainly: *"no continuation, resume, pooling, progress stream, or
+product-session persistence."* Every call starts from zero, so you re-brief the model every time, and
+whatever it learned in the previous call is gone.
+
+A lane is the opposite: **a worker that iterates.**
+
+| | Plain subagent | A lane |
+|---|---|---|
+| What it remembers | nothing; each call starts from zero | its own session, kept across calls |
+| Follow-ups | re-explain the whole task | "continue, but do X instead" |
+| Models it can hold | one model per call | one model per lane, several lanes per product |
+| If it fails | the turn is gone | the job is on disk: read it, resume it, retry it |
+| If your chat is compacted | the subagent call is gone | the worker session and its jobs are untouched |
+| Working directory | the caller's | its own, per lane |
+| Who runs the model | your DSH process hosts the request | the product's own agent, on your own subscription |
+
+The practical difference: a subagent is a question you ask. A lane is a **colleague you hired** — brief
+them once, then keep handing them the next piece of the same job, and they still remember the
+first one.
+
 ### Quota and credits (Codex)
 
 `delegate_gpt` reads Codex's own usage records before every run, so it can stop **before** starting

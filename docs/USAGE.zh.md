@@ -137,6 +137,43 @@ agent 能读 `--help`、能真跑一次看它到底输出什么形状，然后�
 这不算错误，但这就是"记得昨天的 worker"和"不记得的 worker"的区别 —— 先看 `output.session`
 或 `output.sessionPattern`。
 
+#### 如果那个产品没有 CLI，只有 API
+
+有些模型只能用 HTTP 接口够到。插件自带的 `examples/api-lane.mjs` 把 OpenAI 兼容的接口变成一条泳道 ——
+xAI（Grok）、Moonshot（Kimi）、DashScope 兼容模式（千问）、火山方舟（豆包）以及大多数本地推理服务都是这套协议：
+
+```json
+"grok": {
+  "label": "Grok (xAI API)",
+  "bin": { "names": ["node.exe", "node"], "roots": [] },
+  "args": {
+    "base":   ["<插件目录>/examples/api-lane.mjs", "--history-dir", "{cwd}/.api-history"],
+    "prompt": ["-p", "{prompt}"],
+    "resume": ["--resume", "{session}"],
+    "model":  ["--model", "{model}"]
+  },
+  "output": { "format": "json", "session": "session_id", "text": "result", "model": "model" }
+}
+```
+
+密钥**不写进** `config.json`：在跑 `dsh web` 的环境里设 `API_LANE_API_KEY`
+（另外还能设 `API_LANE_BASE_URL`、`API_LANE_MODEL`），或者在 `args.base` 里加 `--key-file <路径>`。
+
+- 脚本**按会话把对话存在磁盘上**，所以 `--resume` 会把整段 thread 发过去，后续任务建立在它已经看过的一切之上。
+  这个连续性就是泳道存在的全部意义。
+- 它会**把任务包内联进去**（`jobs/<id>/packet.md`）—— 纯 API 模型没有文件工具，读不到那个文件。
+- 但它**一个工具都没有**：读不了你的代码、跑不了测试、也写不进 `jobs/<id>/out/`。
+  它用文字给的答案就是交付物。真要动文件，就用带真 CLI 的产品。
+
+#### 为什么不直接用 subagent
+
+因为 subagent 是一次性的，而泳道会迭代。DSH 的 subagent 缝每次调用都开一条全新的 thread，
+什么也不留 —— 官方 provider 的 README 自己写着（"no continuation, resume, pooling, progress stream,
+or product-session persistence"）。你得每次重新交代，而它上一轮学到的东西已经没了。
+泳道有自己的会话、自己的目录、还有一份丢不了的作业记录 ——
+所以"接着做，但这次改成 X"是一句真的能执行的指令，卡住的作业是**续接**而不是重做，
+你的 chat 被压缩也完全碰不到那个 worker。
+
 ### 2.4 额度和 credits（为什么 gpt 有时候会停下来问你）
 
 `delegate_gpt` 在**开始任何事之前**先读 Codex 自己记的用量。有两种情况会让它停下来问你，而不是直接跑：

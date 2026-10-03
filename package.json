@@ -7,6 +7,7 @@
   "files": [
     "lib",
     "plugin-src",
+    "examples",
     "docs",
     "config.json",
     "cordis.patch.yml",
