@@ -277,6 +277,26 @@ Two places, and they edit the **same** lanes through the same host code, so they
 - **The `worker_config` tool** — the same operations, for when you would rather just say it: *"give the
   quick lane effort high"*.
 
+## Watching a lane, and talking back to it
+
+The drawer's **Conversation** tab shows the worker's own conversation — not a summary of it: what it was
+asked, what it said, which tools it called and with what arguments, and what came back. Long tool output
+and its reasoning fold away; the turn text stays readable.
+
+- **Pictures are shown as pictures.** Artifacts come back through a guarded route, and anything that is
+  an image renders inline — because judging a model, a texture or a screenshot by reading a file path is
+  not judging it.
+- **You can answer it, in its own session.** The composer sends a message *into that lane's thread*, so
+  the worker keeps everything it already knew — verified end to end: a number it was told, it still had
+  three turns later. One message is one turn: it is a real CLI run (seconds to minutes), not live typing.
+  There is a checkbox for "new session" when you want a clean thread instead of a continuation.
+- **The panel cannot spend money on its own.** A message from the composer is a job like any other, so it
+  goes through the same quota gate; when the allowance is nearly gone the panel shows the real numbers and
+  waits for an explicit click, and a run that would use credits needs its own approval.
+- **What it cannot read, it says so.** Claude Code and Codex transcripts are parsed from the files those
+  tools write. agy stores its steps as protobuf blobs, so its tab says "not renderable yet" rather than
+  showing an empty conversation, which would look like "the worker said nothing".
+
 ## Quick start
 
 ```

@@ -45,6 +45,12 @@ const TEXT = {
     settingsTitle: '外部 worker', warnAt: '预警阈值', product: '产品', save: '保存', clear: '清空', remove: '删除',
     addLane: '新建泳道', create: '创建', configFile: '配置文件', workspace: '工作目录',
     settingsHint: '改了立刻生效，不用重启；新建的泳道下一次派活就会开自己的会话。',
+    tabConversation: '对话', conversation: '对话', turns: '轮', you: '你', worker: 'worker', tool: '工具',
+    thinking: '思考', toolResult: '结果', noTurns: '这条会话还没有内容。', noSession: '(还没有会话)',
+    cannotRead: '这个产品的会话记录现在还读不出来：', working: '正在跑', send: '发送', sending: '发送中…',
+    sayPlaceholder: '直接跟这个 worker 说 —— 会进它自己的会话，它记得之前的事',
+    sendHint: '一轮一条消息，进的是同一条会话；产出会在上面出现',
+    continueAnyway: '我确认，继续', spendCredits: '我确认，用 credits', newSession: '开新会话（不续接）',
     defaultModel: '(产品默认)', noRole: '(未分工)', none: '无',
     task: '任务', artifacts: '产物', error: '错误', stderr: 'stderr 尾部', result: '完整结果', paths: '文件位置',
     attempts: '执行', exitCode: '退出码', all: '全部', viewJobs: '看它的作业', empty: '还没有作业。',
@@ -59,6 +65,12 @@ const TEXT = {
     settingsTitle: 'External workers', warnAt: 'warn at', product: 'product', save: 'save', clear: 'clear', remove: 'remove',
     addLane: 'Add a lane', create: 'create', configFile: 'config file', workspace: 'workspace',
     settingsHint: 'Changes apply immediately, no restart. A new lane opens its own session on its first delegation.',
+    tabConversation: 'Conversation', conversation: 'Conversation', turns: 'turns', you: 'you', worker: 'worker', tool: 'tool',
+    thinking: 'thinking', toolResult: 'result', noTurns: 'Nothing in this session yet.', noSession: '(no session yet)',
+    cannotRead: 'This product’s conversation cannot be read yet:', working: 'working', send: 'send', sending: 'sending…',
+    sayPlaceholder: 'Say something to this worker — it goes into its own session, and it remembers',
+    sendHint: 'one message per turn, into the same session; what it produces appears above',
+    continueAnyway: 'continue anyway', spendCredits: 'spend credits', newSession: 'new session (do not continue)',
     defaultModel: '(product default)', noRole: '(no role)', none: 'none',
     task: 'task', artifacts: 'artifacts', error: 'error', stderr: 'stderr tail', result: 'full result', paths: 'files',
     attempts: 'attempts', exitCode: 'exit code', all: 'all', viewJobs: 'view its jobs', empty: 'No jobs yet.',
@@ -76,7 +88,18 @@ function pickText() {
 }
 
 // ── shared UI state (one page, one plugin instance) ────────────────────────
-const ui = { open: false, tab: 'lanes', jobId: null, laneFilter: null };
+const ui = {
+  open: false,
+  tab: 'lanes',
+  jobId: null,
+  laneFilter: null,
+  // the conversation tab: which lane, the draft, and whether a message is in flight
+  conversationLane: null,
+  draft: '',
+  newSession: false,
+  sending: false,
+  gate: null,
+};
 const watchers = new Set();
 
 function patchUi(next) {
@@ -523,10 +546,229 @@ function QuotaStrip(text, payload) {
     ...rows);
 }
 
+// ── the conversation ──────────────────────────────────────────────────────
+/**
+ * The worker's own conversation, so a person can see the working and not just
+ * the result — and can say something back into that same session.
+ *
+ * The composer sends a message as a normal job (the host route runs the same
+ * quota gate the tools do), so "talk to the worker" can never become a way to
+ * spend credits without the approval that path requires.
+ */
+function useConversation(laneId) {
+  const [state, setState] = React.useState({ data: null, failure: null });
+  React.useEffect(() => {
+    if (laneId === null || laneId === undefined) { setState({ data: null, failure: null }); return undefined; }
+    let alive = true;
+    const load = async () => {
+      try {
+        const next = await getJson(`/api/external-workers/conversation?lane=${encodeURIComponent(laneId)}&limit=120`);
+        if (alive) setState({ data: next, failure: null });
+      } catch (error) {
+        if (alive) setState((previous) => ({ data: previous.data, failure: String((error && error.message) || error) }));
+      }
+    };
+    void load();
+    let timer = null;
+    try { timer = setInterval(() => { void load(); }, 5000); } catch { timer = null; }
+    return () => {
+      alive = false;
+      if (timer !== null) { try { clearInterval(timer); } catch { /* ignore */ } }
+    };
+  }, [laneId]);
+  return state;
+}
+
+/** One turn. `<details>` gives collapsing with no React state to get wrong. */
+function Turn(text, turn, index) {
+  const role = turn.role === 'user' ? text.you : turn.workerLabel === true ? turn.workerLabelText : text.worker;
+  const who = turn.kind === 'tool' ? `${role} · ${turn.name}` : role;
+  const color = turn.role === 'user' ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-label-secondary)';
+  if (turn.kind === 'tool') {
+    return h('div', { key: index, style: { display: 'flex', gap: 8, fontSize: 11, padding: '1px 0' } },
+      h('span', { style: { flex: '0 0 96px', color, textAlign: 'right' } }, text.tool),
+      h('span', { style: Object.assign({}, mono, { flex: '1 1 auto', color: 'var(--dsw-alias-label-primary)', overflowWrap: 'anywhere' }) }, `${turn.name} ${turn.detail || ''}`.trim()));
+  }
+  if (turn.kind === 'result' || turn.kind === 'reasoning') {
+    const label = turn.kind === 'reasoning' ? text.thinking : text.toolResult;
+    return h('details', { key: index, style: { fontSize: 11, padding: '1px 0' } },
+      h('summary', { style: { cursor: 'pointer', color: 'var(--dsw-alias-label-secondary)' } }, `${label} · ${String(turn.text || '').slice(0, 70)}`),
+      h('pre', { style: { margin: '4px 0 4px 12px', padding: 6, maxHeight: 260, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 6, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } }, turn.text));
+  }
+  return h('div', { key: index, style: { display: 'flex', gap: 8, padding: '2px 0' } },
+    h('span', { style: { flex: '0 0 96px', color, textAlign: 'right', fontSize: 11 } }, who),
+    h('span', { style: { flex: '1 1 auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: 'var(--dsw-alias-label-primary)' } }, turn.text));
+}
+
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
+
+function ConversationTab(text, payload, state, conversation) {
+  const lanes = Array.isArray(payload.lanes) ? payload.lanes : [];
+  const selected = state.conversationLane === null || state.conversationLane === undefined
+    ? (lanes[0] === undefined ? null : lanes[0].id)
+    : state.conversationLane;
+  const chips = lanes.map((lane) => {
+    const active = lane.id === selected;
+    return h('button', {
+      key: lane.id,
+      type: 'button',
+      onClick: () => patchUi({ conversationLane: lane.id, draft: '', gate: null }),
+      style: {
+        cursor: 'pointer',
+        border: `1px solid ${active ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-border-l1)'}`,
+        background: 'transparent',
+        color: active ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-label-secondary)',
+        borderRadius: 999,
+        padding: '1px 10px',
+        fontSize: 11,
+      },
+    }, `${lane.id} · ${lane.worker}`);
+  });
+
+  const blocks = [h('div', { key: 'chips', style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 } }, chips)];
+  if (selected === null) {
+    blocks.push(h('div', { key: 'none', style: { color: 'var(--dsw-alias-label-secondary)' } }, text.empty));
+    return blocks;
+  }
+
+  const data = conversation === null || conversation === undefined ? null : conversation.data;
+  const convFailure = conversation === null || conversation === undefined ? null : conversation.failure;
+  if (convFailure !== null && convFailure !== undefined) {
+    blocks.push(h('div', { key: 'feed', style: { color: 'var(--dsw-alias-state-warn-primary)', marginBottom: 8 } }, `${text.feedError}: ${convFailure}`));
+  }
+  if (data === null || data === undefined || data.lane === undefined) {
+    blocks.push(h('div', { key: 'loading', style: { color: 'var(--dsw-alias-label-secondary)' } }, text.loading));
+    return blocks;
+  }
+
+  const lane = data.lane;
+  blocks.push(h('div', { key: 'head', style: Object.assign({}, box, { marginBottom: 8, fontSize: 11 }) },
+    h('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap' } },
+      h('span', { style: { color: 'var(--dsw-alias-label-primary)', fontWeight: 600 } }, `${lane.id} · ${lane.worker}`),
+      h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } }, lane.model === null ? text.defaultModel : `${lane.model}${lane.model_actual === null ? '' : ` → ${lane.model_actual}`}`),
+      h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } }, lane.sessionId === null ? text.noSession : `${text.session} ${String(lane.sessionId).slice(0, 8)}…`),
+      h('span', { style: { color: 'var(--dsw-alias-label-secondary)' } }, lane.state)),
+    h('div', { style: Object.assign({}, mono, { color: 'var(--dsw-alias-label-secondary)', marginTop: 4 }) }, lane.cwd)));
+
+  if (data.running !== null && data.running !== undefined) {
+    blocks.push(h('div', { key: 'running', style: Object.assign({}, box, { marginBottom: 8, borderColor: 'var(--dsw-alias-brand-primary)' }) },
+      h('div', { style: { color: 'var(--dsw-alias-brand-primary)', fontWeight: 600, marginBottom: 4 } }, `${text.working} · ${data.running.id}`),
+      h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 11 } }, data.running.task)));
+  }
+
+  if (data.supported !== true) {
+    blocks.push(h('div', { key: 'unsupported', style: Object.assign({}, box, { marginBottom: 8, color: 'var(--dsw-alias-state-warn-primary)' }) },
+      text.cannotRead, h('div', { style: { marginTop: 4, fontSize: 11, color: 'var(--dsw-alias-label-secondary)' } }, String(data.reason ?? ''))));
+  } else if (data.turns.length === 0) {
+    blocks.push(h('div', { key: 'empty', style: { color: 'var(--dsw-alias-label-secondary)' } }, text.noTurns));
+  }
+
+  blocks.push(h('div', { key: 'turns', style: Object.assign({}, box, { marginBottom: 8 }) },
+    h('div', { style: { fontWeight: 600, marginBottom: 6 } }, `${text.conversation} · ${data.total} ${text.turns}`),
+    ...data.turns.map((turn, index) => Turn(text, turn, index))));
+
+  // Artifacts, with pictures shown as pictures: judging a model or a screenshot
+  // by reading a file path is not judging it.
+  const jobBlocks = [];
+  for (const job of data.jobs ?? []) {
+    const files = Array.isArray(job.artifacts) ? job.artifacts : [];
+    if (files.length === 0) continue;
+    jobBlocks.push(h('div', { key: `j${job.id}`, style: { marginBottom: 6 } },
+      h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)', marginBottom: 4 } }, `#${job.id} · ${job.status} · ${job.task}`),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
+        ...files.map((file) => {
+          const url = `/api/external-workers/artifact?lane=${encodeURIComponent(lane.id)}&job=${encodeURIComponent(job.id)}&path=${encodeURIComponent(file)}`;
+          const isImage = IMAGE_EXTENSIONS.some((extension) => file.toLowerCase().endsWith(extension));
+          if (isImage !== true) {
+            return h('div', { key: file, style: Object.assign({}, mono, { color: 'var(--dsw-alias-label-secondary)' }) }, file);
+          }
+          return h('a', { key: file, href: url, target: '_blank', rel: 'noreferrer', title: file, style: { display: 'block' } },
+            h('img', { src: url, alt: file, loading: 'lazy', style: { maxWidth: 220, maxHeight: 160, borderRadius: 6, border: '1px solid var(--dsw-alias-border-l1)', display: 'block' } }));
+        }))));
+  }
+  if (jobBlocks.length > 0) {
+    blocks.push(h('div', { key: 'artifacts', style: Object.assign({}, box, { marginBottom: 8 }) },
+      h('div', { style: { fontWeight: 600, marginBottom: 6 } }, text.artifacts), ...jobBlocks));
+  }
+
+  // The composer: one message per turn, into the existing session unless asked
+  // otherwise. Never a placeholder for "live chat" — each send is a real run.
+  if (state.gate !== null && state.gate !== undefined) {
+    const gate = state.gate;
+    blocks.push(h('div', { key: 'gate', style: Object.assign({}, box, { marginBottom: 8, borderColor: 'var(--dsw-alias-state-warn-primary)', whiteSpace: 'pre-wrap', color: 'var(--dsw-alias-state-warn-primary)' }) }, gate.text));
+    if (gate.reason !== undefined && gate.reason !== null) {
+      blocks.push(h('div', { key: 'gatebtn', style: { marginBottom: 8 } },
+        h('button', {
+          type: 'button',
+          onClick: () => { void sendDraft(lane.id, gate.reason === 'credits' ? { allowCredits: true } : { allowQuota: true }); },
+          style: buttonStyle('var(--dsw-alias-state-warn-primary)'),
+        }, gate.reason === 'credits' ? text.spendCredits : text.continueAnyway)));
+    }
+  }
+
+  blocks.push(h('div', { key: 'composer', style: Object.assign({}, box, { marginBottom: 8 }) },
+    h('textarea', {
+      value: state.draft ?? '',
+      onChange: (event) => patchUi({ draft: event.target.value }),
+      placeholder: text.sayPlaceholder,
+      rows: 3,
+      style: Object.assign({}, mono, { width: '100%', boxSizing: 'border-box', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 6, padding: 6, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }),
+    }),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 } },
+      h('label', { style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--dsw-alias-label-secondary)' } },
+        h('input', { type: 'checkbox', checked: state.newSession === true, onChange: () => patchUi({ newSession: state.newSession !== true }) }),
+        text.newSession),
+      h('button', {
+        type: 'button',
+        disabled: state.sending === true || String(state.draft ?? '').trim().length === 0,
+        onClick: () => { void sendDraft(lane.id, {}); },
+        style: Object.assign(buttonStyle('var(--dsw-alias-brand-primary)'), { marginLeft: 'auto' }),
+      }, state.sending === true ? text.sending : text.send),
+      h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)' } }, text.sendHint))));
+
+  return blocks;
+}
+
+/** Send the composer's draft into a lane, and surface whatever comes back. */
+async function sendDraft(laneId, approvals) {
+  const message = String(ui.draft ?? '').trim();
+  if (message.length === 0) return;
+  patchUi({ sending: true, gate: null });
+  try {
+    const response = await fetch('/api/external-workers/say', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-external-workers': '1' },
+      body: JSON.stringify({ lane: laneId, message, new_session: ui.newSession === true, ...approvals }),
+    });
+    const result = await response.json().catch(() => null);
+    if (result !== null && result.blocked === true) {
+      patchUi({ sending: false, gate: { text: result.error ?? '', reason: result.reason ?? null } });
+      return;
+    }
+    if (response.ok !== true) throw new Error(result && result.error ? String(result.error) : `HTTP ${response.status}`);
+    patchUi({ sending: false, draft: '', gate: null, note: `sent · ${result.jobId}` });
+  } catch (error) {
+    patchUi({ sending: false, gate: { text: `${text_of_error(error)}`, reason: null } });
+  }
+}
+
+function text_of_error(error) {
+  return String((error && error.message) || error);
+}
+
 function Drawer() {
   const text = pickText();
   const { payload, failure } = useFeed();
   const state = useUi();
+  // Polled only while the conversation tab is the one on screen: the transcript
+  // reads every product's private files, so it is not fetched for nothing.
+  const lanes = payload !== null && Array.isArray(payload.lanes) ? payload.lanes : [];
+  const conversationLane = state.tab === 'conversation' && state.open === true && state.jobId === null
+    ? (state.conversationLane === null || state.conversationLane === undefined
+      ? (lanes[0] === undefined ? null : lanes[0].id)
+      : state.conversationLane)
+    : null;
+  const conversation = useConversation(conversationLane);
 
   React.useEffect(() => {
     if (state.open !== true) return undefined;
@@ -563,12 +805,14 @@ function Drawer() {
     if (strip !== null) body.push(strip);
     if (state.tab === 'lanes') {
       for (const block of LanesTab(text, payload, state)) body.push(block);
+    } else if (state.tab === 'conversation') {
+      for (const block of ConversationTab(text, payload, state, conversation)) body.push(block);
     } else {
       for (const block of JobsTab(text, payload, state)) body.push(block);
     }
   }
 
-  const tabs = [['lanes', text.tabLanes], ['jobs', text.tabJobs]].map(([id, caption]) => h('button', {
+  const tabs = [['lanes', text.tabLanes], ['conversation', text.tabConversation], ['jobs', text.tabJobs]].map(([id, caption]) => h('button', {
     key: id,
     type: 'button',
     onClick: () => patchUi({ tab: id, jobId: null }),
