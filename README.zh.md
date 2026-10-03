@@ -3,6 +3,8 @@
 > **给 DeepSeek Harness 用的持久化外部 agent worker。** 把长任务丢给 **Claude Code**、**Codex CLI**
 > 和 **Antigravity CLI** —— 走它们各自的官方 CLI 和你**已有的订阅登录** —— 作业在重启和上下文压缩之后依然存在。
 
+有任何问题可以在抖音找我-抖音号：61302110494
+
 [English](README.md) | **中文**
 
 ---
