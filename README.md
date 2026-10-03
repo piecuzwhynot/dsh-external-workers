@@ -32,14 +32,14 @@ a session that never delegates is untouched.
 
 Each lane is an **independent, long-lived session** in its own product, in its own working directory
 (`~/.dsh/workers/<lane id>`), with its own tools. One product can run several lanes — that is how `gpt`
-writes lore on one model in lane `lore` while building models on another in lane `models`. Your DSH
-agent stays the orchestrator; the lanes do the work.
+does quick edits on a fast model in one lane while a heavier model grinds through something long in
+another. Your DSH agent stays the orchestrator; the lanes do the work.
 
 ```
 DSH agent (orchestrator)
-   │  delegate_gpt(task, lane: "lore", context_files, logs, acceptance, …)
+   │  delegate_gpt(task, lane: "quick", context_files, logs, acceptance, …)
    ▼
-Codex lane `lore`  ── runs in ~/.dsh/workers/lore/ ── writes jobs/ext-3/out/*
+Codex lane `quick`  ── runs in ~/.dsh/workers/quick/ ── writes jobs/ext-3/out/*
    │                                                 (its own persistent thread)
    ▼
 durable job record (disk)  ──►  completion notice back into your session
@@ -123,11 +123,11 @@ Ask it: *"list your external worker tools"* and you should see all six.
 ```
 # 1) see the real model list from each product, then set up the lanes
 "Show me the available models for the three external workers."
-"Run gpt as two lanes: 'lore' on gpt-6-luna/medium with speed priority, and 'models' on
+"Run gpt as two lanes: 'quick' on gpt-6-luna/medium with speed priority, and 'deep' on
  gpt-6.1-sol/xhigh with speed priority. Leave claude on opus/high for UI work."
 
 # 2) delegate into a lane
-"Delegate to gpt in the 'models' lane: refactor this module to async, put the result in
+"Delegate to gpt in the 'deep' lane: refactor this module to async, put the result in
  its own folder, then read the artifacts and apply them to my project."
 
 # 3) later, from any session

@@ -55,14 +55,14 @@
 
 ```
 分工这样设，一种活一条泳道：
-- 在 gpt 上开一条泳道 "lore"：分工"写 lore"，模型 gpt-6-luna，effort medium，speed priority
-- 在 gpt 上开一条泳道 "models"：分工"做 3D 模型"，模型 gpt-6.1-sol，effort xhigh，speed priority
+- 在 gpt 上开一条泳道 "quick"：分工"小改动和杂活"，模型 gpt-6-luna，effort medium，speed priority
+- 在 gpt 上开一条泳道 "deep"：分工"长重构和分析"，模型 gpt-6.1-sol，effort xhigh，speed priority
 - 把 "main" 泳道（claude）的分工设成 "UI / 前端"，模型 opus，effort high
 ```
 
 一条泳道 = 一个产品 + 一个模型 + 一个分工，各自有独立的持久会话。为什么不一个产品一个会话？
 因为 Codex 和 Claude 都把会话绑在**一个**模型上，用别的模型去续接那个 thread 就会退化 ——
-所以 `gpt` 需要泳道 `lore`（luna）和泳道 `models`（sol）两个各自独立的会话。
+所以一个模型一条泳道，各有各的会话。
 
 每次 `worker_config(action: "set", …)` 都会把分工**写进磁盘、也写进那个产品的工具描述**，
 所以之后统筹者不用被提醒就知道谁干什么。

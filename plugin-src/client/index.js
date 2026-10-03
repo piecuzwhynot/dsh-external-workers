@@ -310,7 +310,7 @@ function pre(body, key) {
 /**
  * One card per lane. A lane is a product + a model + a role, and it owns its
  * OWN persistent session and its OWN working directory — which is the whole
- * point: two lanes of the same product (say `lore` and `models`, both gpt)
+ * point: two lanes of the same product (two gpt lanes on different models)
  * must never share a session, or the two jobs pollute each other's context.
  * So session, model and directory are shown per lane, never per product.
  */

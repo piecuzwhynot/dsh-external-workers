@@ -28,14 +28,14 @@
 
 每条泳道都是对应产品里一个**独立的、长期存在的会话**，有自己的工作目录
 （`~/.dsh/workers/<lane id>`）、自己的工具链。一个产品可以同时跑好几条泳道 ——
-`gpt` 用泳道 `lore` 写 lore、用泳道 `models` 做模型，就是这样分开的。
+`gpt` 用快模型那条泳道做小改动、用重模型那条泳道啃长活，就是这样分开的。
 DSH 依然是统筹者，泳道负责干活。
 
 ```
 DSH agent（统筹）
-   │  delegate_gpt(task, lane: "lore", context_files, logs, acceptance, …)
+   │  delegate_gpt(task, lane: "quick", context_files, logs, acceptance, …)
    ▼
-Codex 泳道 lore  ── 在 ~/.dsh/workers/lore/ 里跑 ── 产出 jobs/ext-3/out/*
+Codex 泳道 quick  ── 在 ~/.dsh/workers/quick/ 里跑 ── 产出 jobs/ext-3/out/*
    │                                              （它自己的持久 thread）
    ▼
 磁盘上的持久作业记录  ──►  完成通知回到你的会话
@@ -111,10 +111,10 @@ dsh plugin --profile web add file:/path/to/dsh-external-workers-0.1.0.tgz
 ```
 # 1) 先看每个产品真实可用的模型，再建泳道
 "把三个外部 worker 的可用模型列出来"
-"gpt 开两条泳道：泳道 lore 用 gpt-6-luna/medium + speed priority，泳道 models 用 gpt-6.1-sol/xhigh + speed priority；claude 留在 opus/high 做 UI"
+"gpt 开两条泳道：泳道 quick 用 gpt-6-luna/medium + speed priority，泳道 deep 用 gpt-6.1-sol/xhigh + speed priority；claude 留在 opus/high 做 UI"
 
 # 2) 派活（点名泳道）
-"让 gpt 在 models 泳道里把这段代码改成异步的，产出放它自己文件夹，然后你读出来应用到我的项目里"
+"让 gpt 在 deep 泳道里把这段代码改成异步的，产出放它自己文件夹，然后你读出来应用到我的项目里"
 
 # 3) 之后在任何会话里
 "看看外部作业"

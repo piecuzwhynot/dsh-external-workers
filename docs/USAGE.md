@@ -57,15 +57,14 @@ Then, in one message:
 
 ```
 Set up the division of labour, one lane per job:
-- add a lane "lore" on gpt: role "lore writing", model gpt-6-luna, effort medium, speed priority
-- add a lane "models" on gpt: role "3D model work", model gpt-6.1-sol, effort xhigh, speed priority
+- add a lane "quick" on gpt: role "small edits and chores", model gpt-6-luna, effort medium, speed priority
+- add a lane "deep" on gpt: role "long refactors and analysis", model gpt-6.1-sol, effort xhigh, speed priority
 - set the "main" lane (claude) to role "UI / frontend", model opus, effort high
 ```
 
 A lane is one product + one model + one role, with its own persistent session. Why not one session per
 product? Because Codex and Claude each attach a session to **one** model and degrade it when that
-thread is resumed on a different one — so `gpt` needs lane `lore` (luna) and lane `models` (sol) as two
-separate sessions.
+thread is resumed on a different one — so `gpt` needs one lane per model, each with its own session.
 
 Each `worker_config(action: "set", …)` writes the assignment to disk **and into that product's tool
 description**, so from then on the orchestrator knows who does what without being reminded. Use
