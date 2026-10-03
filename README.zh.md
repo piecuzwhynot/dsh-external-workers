@@ -113,21 +113,47 @@ DSH 自带 subagent 机制，也有官方可选的产品 provider（`@deepseek-a
 ## 安装
 
 ```bash
-# 从 npm（发布后）
-dsh plugin --profile web add dsh-external-workers
+# 从 Release 产物装（这个 URL 永远不含版本号）
+dsh plugin --profile web add --force \
+  https://github.com/piecuzwhynot/dsh-external-workers/releases/latest/download/dsh-external-workers.tgz
+
+# 固定版本，并且可以核对校验和
+dsh plugin --profile web add --force \
+  https://github.com/piecuzwhynot/dsh-external-workers/releases/download/v0.3.0/dsh-external-workers-0.3.0.tgz
 
 # 或从本地目录 / tarball
 dsh plugin --profile web add link:C:/path/to/dsh-external-workers
-dsh plugin --profile web add file:/path/to/dsh-external-workers-0.1.0.tgz
+dsh plugin --profile web add file:/path/to/dsh-external-workers-0.3.0.tgz
 ```
 
 然后**重启 harness**（`dsh web`）—— bundle 列表是开机读的 —— 再开一个会话，
 问它 *"列出你的外部 worker 工具"*，应该能看到全部 6 个。
 
+核对与卸载：
+
+```bash
+dsh plugin --profile web list
+dsh plugin --profile web remove dsh-external-workers
+```
+
+Release 产物由 `node scripts/release.mjs` 生成；如果 tarball 和工作区**不是逐字节一致**，它会拒绝打包
+（这就是用来抓"忘了先重建 client bundle 就打包"的），并在旁边写出 `SHA256SUMS`。
+
 > **`link:` 安装需要包内自带 `node_modules`。** 被 link 的包是从它**真实路径**向上解析 bare import 的，
 > 够不到 profile 的 `node_modules`。要么从 npm/tarball 安装，要么给
 > `@deepseek-ai/dsh-tools`、`@deepseek-ai/dsh-storage-domain`、`@deepseek-ai/dsh-llm`、`zod`
 > 在本包自己的 `node_modules` 里建 junction / symlink。
+
+## 在哪配置
+
+两个地方，而且它们改的是**同一批泳道、走同一份宿主代码**，所以不可能对不上：
+
+- **设置 → 外部 worker** —— 一个真正的设置页：一条泳道一块，分工 / 模型 / 档位 / 速度都能就地改，
+  另外显示产品列表、实时额度和配置文件位置。保存立刻生效，不用重启；新建和删除泳道也在这里。
+- **`config.json`** —— 声明式的那份：`lanes`、`products`、`quota`、`scope`，以及每个产品的 CLI 行为。
+  用来初始化一台新机器，或者把配置放进版本管理。
+- **`worker_config` 工具** —— 同一批操作，只是给你懒得点的时候用：
+  *"把 quick 泳道的 effort 调到 high"*。
 
 ## 快速开始
 

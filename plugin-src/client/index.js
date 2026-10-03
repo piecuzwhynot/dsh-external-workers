@@ -42,6 +42,9 @@ const TEXT = {
     running: '运行中', queued: '排队', completed: '完成', failed: '失败', blocked: '受阻', retryable: '可重试', canceled: '已取消',
     lane: '泳道', role: '分工', model: '请求模型', actual: '实际跑的', state: '状态', session: '会话', cwd: '工作目录', jobsOf: '个作业', lastModel: '上次实际用的',
     quota: '额度', quotaNotReported: '该产品不上报额度', quotaCredits: '将用 credits', creditsSpent: '⚠️ 这次花了 credits',
+    settingsTitle: '外部 worker', warnAt: '预警阈值', product: '产品', save: '保存', clear: '清空', remove: '删除',
+    addLane: '新建泳道', create: '创建', configFile: '配置文件', workspace: '工作目录',
+    settingsHint: '改了立刻生效，不用重启；新建的泳道下一次派活就会开自己的会话。',
     defaultModel: '(产品默认)', noRole: '(未分工)', none: '无',
     task: '任务', artifacts: '产物', error: '错误', stderr: 'stderr 尾部', result: '完整结果', paths: '文件位置',
     attempts: '执行', exitCode: '退出码', all: '全部', viewJobs: '看它的作业', empty: '还没有作业。',
@@ -53,6 +56,9 @@ const TEXT = {
     running: 'running', queued: 'queued', completed: 'done', failed: 'failed', blocked: 'blocked', retryable: 'retryable', canceled: 'canceled',
     lane: 'lane', role: 'role', model: 'requested', actual: 'ran on', state: 'state', session: 'session', cwd: 'working dir', jobsOf: 'jobs', lastModel: 'last ran on',
     quota: 'quota', quotaNotReported: 'not reported by this product', quotaCredits: 'will spend credits', creditsSpent: '⚠️ this run spent credits',
+    settingsTitle: 'External workers', warnAt: 'warn at', product: 'product', save: 'save', clear: 'clear', remove: 'remove',
+    addLane: 'Add a lane', create: 'create', configFile: 'config file', workspace: 'workspace',
+    settingsHint: 'Changes apply immediately, no restart. A new lane opens its own session on its first delegation.',
     defaultModel: '(product default)', noRole: '(no role)', none: 'none',
     task: 'task', artifacts: 'artifacts', error: 'error', stderr: 'stderr tail', result: 'full result', paths: 'files',
     attempts: 'attempts', exitCode: 'exit code', all: 'all', viewJobs: 'view its jobs', empty: 'No jobs yet.',
@@ -614,6 +620,159 @@ function Drawer() {
   );
 }
 
+// ── settings page ─────────────────────────────────────────────────────────
+/**
+ * The External workers settings section.
+ *
+ * It edits the SAME lanes the `worker_config` tool edits — the route it posts to
+ * runs the same host functions, so the page and the model can never disagree
+ * about what a lane is. It is a page rather than a preference row because a
+ * roster needs room: one block per lane, plus the products and their quota.
+ */
+function SettingsPage(props) {
+  const text = pickText();
+  const [state, setState] = React.useState({ payload: null, failure: null, busy: false, note: null });
+  const [draft, setDraft] = React.useState({});
+  const [newLane, setNewLane] = React.useState({ lane: '', worker: '' });
+
+  const load = React.useCallback(async () => {
+    try {
+      const next = await getJson('/api/external-workers/settings');
+      setState((previous) => ({ ...previous, payload: next, failure: null }));
+    } catch (error) {
+      setState((previous) => ({ ...previous, failure: String((error && error.message) || error) }));
+    }
+  }, []);
+
+  React.useEffect(() => { void load(); }, [load]);
+
+  const send = React.useCallback(async (body) => {
+    setState((previous) => ({ ...previous, busy: true, note: null }));
+    try {
+      const response = await fetch('/api/external-workers/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-external-workers': '1' },
+        body: JSON.stringify(body),
+      });
+      const result = await response.json().catch(() => null);
+      if (response.ok !== true) throw new Error(result && result.error ? String(result.error) : `HTTP ${response.status}`);
+      setState((previous) => ({ ...previous, payload: result, busy: false, note: result.message ?? 'saved', failure: null }));
+    } catch (error) {
+      setState((previous) => ({ ...previous, busy: false, failure: String((error && error.message) || error) }));
+    }
+  }, []);
+
+  if (state.payload === null || state.payload === undefined) {
+    return h('div', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12 } }, state.failure === null ? text.loading : `${text.feedError}: ${state.failure}`);
+  }
+
+  const payload = state.payload;
+  const newLaneId = (newLane.lane ?? '').trim();
+  const newLaneWorker = newLane.worker ?? '';
+  const productIds = (payload.products ?? []).map((product) => product.id);
+  const blocks = [];
+
+  if (state.failure !== null) {
+    blocks.push(h('div', { key: 'err', style: Object.assign({}, box, { marginBottom: 10, borderColor: 'var(--dsw-alias-state-error-primary)', color: 'var(--dsw-alias-state-error-primary)' }) }, state.failure));
+  }
+  if (state.note !== null) {
+    blocks.push(h('div', { key: 'note', style: Object.assign({}, box, { marginBottom: 10, color: 'var(--dsw-alias-state-success-primary)' }) }, state.note));
+  }
+
+  // quota first: it is the one number that decides whether work should start
+  const quotaRows = (payload.quota ?? []).map((entry) => h('div', { key: entry.product, style: { display: 'flex', gap: 8, fontSize: 12 } },
+    h('span', { style: { minWidth: 74, fontWeight: 600 } }, entry.product),
+    h('span', { style: { color: entry.willUseCredits === true ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-label-secondary)' } }, entry.readable === true ? entry.text : text.quotaNotReported)));
+  blocks.push(h('div', { key: 'quota', style: Object.assign({}, box, { marginBottom: 10 }) },
+    h('div', { style: { fontWeight: 600, marginBottom: 6 } }, `${text.quota} · ${text.warnAt} ${payload.quotaWarnAtPercent}%`),
+    ...quotaRows));
+
+  for (const lane of payload.lanes) {
+    const edit = draft[lane.id] ?? { role: lane.role ?? '', model: lane.model ?? '', effort: lane.effort ?? '', speed: lane.speed ?? '' };
+    const setField = (field) => (event) => setDraft((previous) => ({ ...previous, [lane.id]: { ...edit, [field]: event.target.value } }));
+    const input = (field, width) => h('input', {
+      value: edit[field],
+      onChange: setField(field),
+      placeholder: field === 'role' ? text.noRole : text.defaultModel,
+      style: Object.assign({}, mono, { flex: '1 1 auto', minWidth: width, background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 6, padding: '3px 6px' }),
+    });
+    blocks.push(h('div', { key: lane.id, style: Object.assign({}, box, { marginBottom: 8 }) },
+      h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6, flexWrap: 'wrap' } },
+        h('strong', { style: { fontSize: 13 } }, lane.id),
+        h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 11 } }, lane.worker),
+        h('span', { style: Object.assign({}, mono, { color: 'var(--dsw-alias-label-secondary)' }) }, `~/.dsh/workers/${lane.id}`),
+        h('span', { style: { marginLeft: 'auto', fontSize: 11, color: 'var(--dsw-alias-label-secondary)' } },
+          `${lane.state}${lane.sessionId === null ? '' : ` · ${String(lane.sessionId).slice(0, 8)}…`}${lane.lastModel === null ? '' : ` · ${text.lastModel} ${lane.lastModel}`}`)),
+      h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 } },
+        h('span', { style: { flex: '0 0 52px', fontSize: 11, color: 'var(--dsw-alias-label-secondary)', alignSelf: 'center' } }, text.role), input('role', 160)),
+      h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 } },
+        h('span', { style: { flex: '0 0 52px', fontSize: 11, color: 'var(--dsw-alias-label-secondary)', alignSelf: 'center' } }, text.model), input('model', 120)),
+      h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+        h('span', { style: { flex: '0 0 52px', fontSize: 11, color: 'var(--dsw-alias-label-secondary)', alignSelf: 'center' } }, text.effort), input('effort', 60),
+        h('span', { style: { flex: '0 0 auto', fontSize: 11, color: 'var(--dsw-alias-label-secondary)', alignSelf: 'center' } }, text.speed), input('speed', 60),
+        h('button', {
+          type: 'button',
+          disabled: state.busy,
+          onClick: () => { void send({ action: 'set', lane: lane.id, role: edit.role, model: edit.model, effort: edit.effort, speed: edit.speed }); },
+          style: buttonStyle('var(--dsw-alias-brand-primary)'),
+        }, text.save),
+        h('button', {
+          type: 'button',
+          disabled: state.busy,
+          onClick: () => { void send({ action: 'set', lane: lane.id, clear: true }); },
+          style: buttonStyle('var(--dsw-alias-label-secondary)'),
+        }, text.clear),
+        h('button', {
+          type: 'button',
+          disabled: state.busy,
+          onClick: () => { void send({ action: 'remove', lane: lane.id }); },
+          style: buttonStyle('var(--dsw-alias-state-error-primary)'),
+        }, text.remove))));
+  }
+
+  blocks.push(h('div', { key: 'add', style: Object.assign({}, box, { marginBottom: 10 }) },
+    h('div', { style: { fontWeight: 600, marginBottom: 6 } }, text.addLane),
+    h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+      h('input', {
+        value: newLaneId,
+        onChange: (event) => setNewLane((previous) => ({ ...previous, lane: event.target.value })),
+        placeholder: 'lane id (e.g. review)',
+        style: Object.assign({}, mono, { flex: '1 1 140px', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 6, padding: '3px 6px' }),
+      }),
+      h('select', {
+        value: newLaneWorker,
+        onChange: (event) => setNewLane((previous) => ({ ...previous, worker: event.target.value })),
+        style: Object.assign({}, mono, { flex: '0 1 140px', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 6, padding: '3px 6px' }),
+      }, [h('option', { key: '', value: '' }, text.product), ...productIds.map((id) => h('option', { key: id, value: id }, id))]),
+      h('button', {
+        type: 'button',
+        disabled: state.busy || newLaneId.length === 0 || newLaneWorker.length === 0,
+        onClick: () => { void send({ action: 'add', lane: newLaneId.toLowerCase(), worker: newLaneWorker }); setNewLane({ lane: '', worker: '' }); },
+        style: buttonStyle('var(--dsw-alias-brand-primary)'),
+      }, text.create))));
+
+  blocks.push(h('div', { key: 'where', style: Object.assign({}, box, { fontSize: 11, color: 'var(--dsw-alias-label-secondary)' }) },
+    h('div', null, `${text.product}: ${(payload.products ?? []).map((product) => `${product.id}${product.builtIn === true ? '' : ' (custom)'}`).join(' · ')}`),
+    h('div', { style: mono }, `${text.configFile}: ${payload.configPath}`),
+    h('div', { style: mono }, `${text.workspace}: ${payload.workspaceRoot}`),
+    h('div', null, text.settingsHint)));
+
+  return h('div', { style: { padding: '4px 2px', fontSize: 12, display: 'flex', flexDirection: 'column' } }, blocks);
+}
+
+function buttonStyle(color) {
+  return {
+    cursor: 'pointer',
+    border: `1px solid ${color}`,
+    background: 'transparent',
+    color,
+    borderRadius: 6,
+    padding: '2px 10px',
+    fontSize: 11,
+    flex: '0 0 auto',
+  };
+}
+
 // ── registration ──────────────────────────────────────────────────────────
 export function apply(ctx) {
   const slots = ctx.get('slots');
@@ -627,5 +786,12 @@ export function apply(ctx) {
   slots.inject('shell.overlay', () => slots.register(
     { name: 'shell.overlay', id: 'external-workers-drawer', order: 30, label: 'External worker details' },
     () => h('div', { style: { pointerEvents: 'none' } }, h(Drawer, null)),
+  ));
+
+  // A real settings page, because a roster needs room. It edits the same lanes
+  // the worker_config tool does; the route behind it calls the same host code.
+  slots.inject('settings.section', () => slots.register(
+    { name: 'settings.section', id: 'external-workers', order: 30, label: () => pickText().settingsTitle },
+    () => h(SettingsPage, null),
   ));
 }

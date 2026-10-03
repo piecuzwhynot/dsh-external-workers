@@ -126,21 +126,49 @@ not signed in is simply reported as `blocked` by `check_external_job`.
 ## Install
 
 ```bash
-# from npm (once published)
-dsh plugin --profile web add dsh-external-workers
+# from a release tarball (the URL never contains a version)
+dsh plugin --profile web add --force \
+  https://github.com/piecuzwhynot/dsh-external-workers/releases/latest/download/dsh-external-workers.tgz
+
+# a fixed version, with a checksum to verify it
+dsh plugin --profile web add --force \
+  https://github.com/piecuzwhynot/dsh-external-workers/releases/download/v0.3.0/dsh-external-workers-0.3.0.tgz
 
 # or from a local checkout / tarball
 dsh plugin --profile web add link:C:/path/to/dsh-external-workers
-dsh plugin --profile web add file:/path/to/dsh-external-workers-0.1.0.tgz
+dsh plugin --profile web add file:/path/to/dsh-external-workers-0.3.0.tgz
 ```
 
 Then **restart the harness** (`dsh web`) — the bundle list is read at boot — and open a session.
 Ask it: *"list your external worker tools"* and you should see all six.
 
+Verify and remove:
+
+```bash
+dsh plugin --profile web list
+dsh plugin --profile web remove dsh-external-workers
+```
+
+The release artifact is built by `node scripts/release.mjs`, which refuses to pack when the tarball
+does not match the working tree byte for byte (that is what catches "packed before rebuilding the
+client bundle") and writes `SHA256SUMS` next to it.
+
 > **`link:` installs need a local `node_modules`.** A linked package resolves its own bare imports
 > from its real path, so it cannot see the profile's `node_modules`. Either install from npm/tarball,
 > or drop junctions/symlinks for `@deepseek-ai/dsh-tools`, `@deepseek-ai/dsh-storage-domain`,
 > `@deepseek-ai/dsh-llm` and `zod` into the package's own `node_modules`.
+
+## Where you configure it
+
+Two places, and they edit the **same** lanes through the same host code, so they can never disagree:
+
+- **Settings → External workers** — a real settings page: one block per lane with its role, model,
+  effort and speed editable in place, plus the products, live quota and where the config lives. Saving
+  applies immediately; no restart. Adding and removing lanes lives here too.
+- **`config.json`** — the declarative version: `lanes`, `products`, `quota`, `scope`, and per-product
+  CLI behaviour. Use it to seed a fresh install or to keep the setup in version control.
+- **The `worker_config` tool** — the same operations, for when you would rather just say it: *"give the
+  quick lane effort high"*.
 
 ## Quick start
 
@@ -186,8 +214,7 @@ apply without a restart.
 ### Lanes
 
 ```json
-"lanes": [
-  { "id": "main", "worker": "claude", "role": "example lane: planning and code review", "model": "opus", "effort": "high", "speed": null },
+"lanes": [  { "id": "main", "worker": "claude", "role": "example lane: planning and code review", "model": "opus", "effort": "high", "speed": null },
   { "id": "quick", "worker": "gpt", "role": "example lane: fast edits and scripted chores", "model": "gpt-6-luna", "effort": "medium", "speed": "priority" },
   { "id": "deep", "worker": "gpt", "role": "example lane: the heavy model work", "model": "gpt-6.1-sol", "effort": "xhigh", "speed": "priority" },
   { "id": "research", "worker": "google", "role": "example lane: research and data gathering", "model": "gemini-3.1-pro-high", "effort": "high", "speed": null }
