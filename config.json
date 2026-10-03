@@ -1,13 +1,11 @@
 {
   "_comment": "Runtime configuration. Read on every use, so most edits take effect without a restart. Only the tool ATTACHMENT decision (scope) is evaluated once, when a session's agent is created.",
-
   "workspaceRoot": "~/.dsh/workers",
-  "defaultTimeoutMinutes": 30,
+  "defaultTimeoutMinutes": 0,
   "notifyOnCompletion": true,
   "maxInlineFileBytes": 65536,
   "maxTotalInlineBytes": 524288,
   "logTailLines": 200,
-
   "scope": {
     "_comment": "Which sessions receive the six tools. 'per-session' attaches them to the agent's OWN scope, so a session that is not selected keeps a byte-for-byte unchanged tool catalog and system prompt. A session must match nothing here to receive them.",
     "mode": "per-session",
@@ -15,7 +13,6 @@
     "excludeWorkspaces": [],
     "excludeSessionIds": []
   },
-
   "workers": {
     "claude": {
       "enabled": true,
@@ -36,43 +33,101 @@
       "extraArgs": []
     }
   },
-
   "lanes": [
-    { "id": "main", "worker": "claude", "role": "example lane: planning and code review", "model": "opus", "effort": "high", "speed": null },
-    { "id": "quick", "worker": "gpt", "role": "example lane: fast edits and scripted chores", "model": "gpt-6-luna", "effort": "medium", "speed": "priority" },
-    { "id": "deep", "worker": "gpt", "role": "example lane: the heavy model work", "model": "gpt-6.1-sol", "effort": "xhigh", "speed": "priority" },
-    { "id": "research", "worker": "google", "role": "example lane: research and data gathering", "model": "gemini-3.1-pro-high", "effort": "high", "speed": null }
+    {
+      "id": "main",
+      "worker": "claude",
+      "role": "example lane: planning and code review",
+      "model": "opus",
+      "effort": "high",
+      "speed": null
+    },
+    {
+      "id": "quick",
+      "worker": "gpt",
+      "role": "example lane: fast edits and scripted chores",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "speed": "priority"
+    },
+    {
+      "id": "deep",
+      "worker": "gpt",
+      "role": "example lane: the heavy model work",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "speed": "priority"
+    },
+    {
+      "id": "research",
+      "worker": "google",
+      "role": "example lane: research and data gathering",
+      "model": "gemini-3.1-pro-high",
+      "effort": "high",
+      "speed": null
+    }
   ],
-
   "quota": {
     "_comment": "Ask before a gpt delegation when the Codex plan allowance is nearly gone, and require separate approval before any run that would spend paid credits. Read from Codex's own rollout files ($CODEX_HOME/sessions), so it stays current even when the usage happened in the Codex app rather than through this plugin. Only Codex publishes these numbers; the other two products report nothing, and this setting does nothing for them.",
     "enabled": true,
     "warnAtPercent": 90
   },
-
   "products": {
     "_comment": "Custom products: teach the bridge a CLI it was never written for (Kimi, Qwen, Grok, Doubao, a local runner, ...). Copy the disabled example below, check the flags against THAT CLI's own --help, then delete \"enabled\": false. A product defined here gets its own delegate_<id> tool and can carry lanes just like the built-ins. Keep it disabled, or delete it, if you do not need it. See README -> Custom products.",
     "example": {
       "enabled": false,
       "label": "Example Agent CLI",
       "bin": {
-        "names": ["example-cli.exe", "example-cli"],
-        "roots": ["~/.example/bin"],
+        "names": [
+          "example-cli.exe",
+          "example-cli"
+        ],
+        "roots": [
+          "~/.example/bin"
+        ],
         "hint": "Install example-cli, or pin workers.example.cliPath to the binary."
       },
       "args": {
-        "base": ["-p", "{prompt}"],
-        "resume": ["--resume", "{session}"],
-        "model": ["--model", "{model}"],
-        "effort": ["--effort", "{effort}"],
-        "cwd": ["--cwd", "{cwd}"],
-        "extra": ["--output-format", "json"]
+        "base": [
+          "-p",
+          "{prompt}"
+        ],
+        "resume": [
+          "--resume",
+          "{session}"
+        ],
+        "model": [
+          "--model",
+          "{model}"
+        ],
+        "effort": [
+          "--effort",
+          "{effort}"
+        ],
+        "cwd": [
+          "--cwd",
+          "{cwd}"
+        ],
+        "extra": [
+          "--output-format",
+          "json"
+        ]
       },
-      "output": { "format": "json", "session": "session_id", "text": "result", "error": "error", "model": "model" },
-      "models": { "command": ["models"], "format": "lines" }
+      "output": {
+        "format": "json",
+        "session": "session_id",
+        "text": "result",
+        "error": "error",
+        "model": "model"
+      },
+      "models": {
+        "command": [
+          "models"
+        ],
+        "format": "lines"
+      }
     }
   },
-
   "_notes": {
     "quota": "Only gpt reports a readable allowance. warnAtPercent (default 90) is the point where delegate_gpt stops and asks instead of starting: at or above it the tool returns the real numbers and waits for the user, and continuing needs allow_quota: true. If Codex's plan window is already spent, the run would be billed to CREDITS — that needs allow_credits: true instead, so money is never spent by accident. A run that does spend credits is reported afterwards with the amount, on the job record and in the completion notice. The other two products publish nothing readable (Claude Code computes its usage but only renders it in its TUI; agy logs no numbers), so they are never blocked by this; a hard limit still shows up reactively as a retryable quota failure.",
     "products": "A custom product is DATA, not code: add one without touching the plugin. Required: bin (how to find the CLI) and args (the command line templates, with at least one section referencing {prompt}). Available placeholders: {prompt} {session} {model} {effort} {speed} {cwd} {timeout} {image} {index}. Sections are emitted in this order: base, cwd, resume, model, effort, speed, images, prompt, extra — and any section whose placeholder has no value is skipped whole, so an absent model never leaves a dangling flag behind. A CLI that takes the prompt right after its flag puts both in base: [\"-p\", \"{prompt}\"]; a CLI that takes it last uses args.prompt. output.format is json | jsonl | text; for text, a sessionPattern with a capture group pulls the session id out of stdout. models.command is the CLI's own model-list command, read as lines or json. Recipe errors are reported at startup, never silently ignored.",
@@ -86,6 +141,7 @@
     "claude.permissionMode": "default | acceptEdits | auto | bypassPermissions | manual | dontAsk | plan. acceptEdits lets the worker read and edit files; shell commands it cannot get approval for are soft-denied in print mode. Use bypassPermissions only if you accept full trust.",
     "gpt.sandboxMode": "read-only | workspace-write | danger-full-access, passed per call as -c sandbox_mode=...",
     "workers.<id>.extraArgs": "Extra CLI arguments appended to every delegation. E.g. google: [\"--dangerously-skip-permissions\"] to drop agy's permission gate entirely.",
-    "google permissions": "agy soft-denies tools that headless mode cannot prompt for, and still reports status SUCCESS. Grant what the worker needs in the Antigravity shared config (~/.gemini/config/config.json) under userSettings.globalPermissionGrants.allow — write_file(<absolute dir>) and command(regex:...) forms. See docs/USAGE.md."
+    "google permissions": "agy soft-denies tools that headless mode cannot prompt for, and still reports status SUCCESS. Grant what the worker needs in the Antigravity shared config (~/.gemini/config/config.json) under userSettings.globalPermissionGrants.allow — write_file(<absolute dir>) and command(regex:...) forms. See docs/USAGE.md.",
+    "defaultTimeoutMinutes": "0 = no limit, which is the sane default: a real worker job can run for hours. A positive number kills the worker after that many minutes and marks the job retryable (the worker session survives, so it can be resumed). delegate_* may pass timeout_minutes per job; 0 means no limit. When no limit is set the agy flag --print-timeout is OMITTED rather than computed, because agy takes that flag in whole minutes and a computed 'no limit' would have become a five-minute cap."
   }
 }
