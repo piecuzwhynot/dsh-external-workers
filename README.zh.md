@@ -62,6 +62,7 @@ DSH 自带 subagent 机制，也有官方可选的产品 provider（`@deepseek-a
 | [mjylfz/dsh-subagent-codex](https://github.com/mjylfz/dsh-subagent-codex) | DSH 插件：在官方 `SubagentProvider` 缝上做一个 `subagent_codex` 工具 | **只有 Codex、且一次性**（每次调用新开一个 Codex 会话），结果是 subagent 形态。本插件覆盖**三个**产品，并且**默认续接同一个会话**。 |
 | `@deepseek-ai/dsh-subagent-codex` / `-claude-code`（官方可选） | DSH 官方产品 provider | 官方就是**一次性**；而且 Codex 那个只从 `PATH` 找 `codex`。 |
 | [amlyczz/dsh-agy-link](https://github.com/amlyczz/dsh-agy-link)、[darkings/dsh-agy-provider](https://github.com/darkings/dsh-agy-provider)、[DavidRm1911/dsh-llm-subscription](https://github.com/DavidRm1911/dsh-llm-subscription) | 把这些 CLI/订阅当作 DSH 模型选择器里的**模型提供者** | **架构相反**：那边是*你的 DSH agent 跑在那个模型上*；这边是*那个产品自己的 agent 带着自己的工具、工作区、会话去干活*。 |
+| [NOirBRight/dsh-external-agents](https://github.com/NOirBRight/dsh-external-agents) | DSH 插件：同类外部编码产品的**控制面**（Codex、Claude Code、Cursor Agent、Antigravity）—— 设置页里探测/启用、工具注册在宿主平面、后台任务进 DSH Job Panel | **意图上最接近的兄弟，但在那个最影响日常使用的决定上正好相反**：它**设计成一次性**（它自己的 ADR 0003 写明：每次委托都付一次全新的产品上下文，而且不能对同一个 Codex 线程补一句）；本插件则是**每条泳道一个持久会话**，默认续接、失败可续。直接对比见下面。 |
 | [czm15053/dsh-peer-link](https://github.com/czm15053/dsh-peer-link)、[kirkchinese/claude2dsh](https://github.com/kirkchinese/claude2dsh) | DSH 与 Claude Code 之间的对等消息 / 会话导入 | 不是委派：没有作业、没有结果契约、没有"把resume当作作业"。 |
 
 本插件看起来独有的几点：
@@ -76,6 +77,26 @@ DSH 自带 subagent 机制，也有官方可选的产品 provider（`@deepseek-a
 5. **泳道的分工与模型写进工具描述** —— 交代一次谁干什么，之后路由自动跟着走。
 6. **对任何 CLI 开放，靠配置接入** —— 下面三个是手写适配的；其余任何 agent CLI 都在 `config.json` 里
    **描述**进来（见 [自定义产品](#自定义产品豆包--千问--kimi--grok-)）。不用 fork、不用改代码、不用等发版。
+7. **派活之前先读额度** —— 别人都没做，因为这是唯一会**静默花钱**的地方（见 [额度和 credits](#额度和-creditscodex)）。
+
+#### 和最近的兄弟 `dsh-external-agents` 直接对比
+
+同一个问题、同一批产品，两个项目对核心问题给出了相反的答案。它的取舍写在 ADR 里，所以这不是我猜它的意图：
+
+| | `dsh-external-agents` | 本插件 |
+|---|---|---|
+| 连续性 | **设计成一次性**：每次委托都是一个全新的产品上下文，每次都新起进程 | **每条泳道一个持久会话**，默认续接，失败后还能接着续 |
+| 你能说 | 「把这个独立任务做掉」 | 「接着上次继续，但这次改成 X」 |
+| 作业记录 | 注册进 harness 自己的 job 注册表（Job Panel）—— **在内存里**，重启就没了 | 存在持久存储域里，重启或压缩之后任何会话都还能读到 |
+| 同一产品的会话数 | 一个 adapter 一个（一个模型） | 你想开几条泳道就几条（产品 + 模型 + 分工），各有各的目录 |
+| 加产品 | 固定的四个出厂 adapter；**用户自定义 argv 是明确的非目标** | 任何 CLI 都能用配置接（连没有 CLI、只有 API 的模型也行） |
+| 交接方式 | 一段独立的任务文本 | 磁盘上的 packet（内联文件、日志、截图、验收标准）+ 收回来的产物清单 |
+| 套餐额度 / credits | 没有涉及 | 派活前先读 Codex 用量；额度已经用完时**不可能静默花掉** |
+| 谁能看到工具 | 宿主平面 —— 该 profile 的每个会话 | 按会话挂载；可按 preset / 工作区 / 会话 id 排除 |
+| **它更强的地方** | **一个真正的设置页**（探测每个产品、启用、选默认）—— 本插件走 `config.json` 配置、状态显示在输入框上方的面板里。另外它支持 **Cursor Agent**，本插件还不支持。 | |
+
+如果你要的只是「启用一个工人、派一个任务、在 Job Panel 里看它跑完」，它那套控制面做得更体面。
+本插件是为另一种情况存在的：**同一个工人，反复用，而且必须记得住。**
 
 ## 前置条件
 

@@ -67,6 +67,7 @@ Searched the ecosystem (GitHub + the 4,400-entry `awesome-dsh-plugin` list). The
 | [mjylfz/dsh-subagent-codex](https://github.com/mjylfz/dsh-subagent-codex) | DSH plugin: one `subagent_codex` tool over the official `SubagentProvider` seam | Codex only, **one-shot** (new Codex session every call), subagent-result shaped. This one covers **three** products and **resumes the same session** by default. |
 | `@deepseek-ai/dsh-subagent-codex` / `-claude-code` (official, optional) | DSH product providers | Officially **one-shot**, and the Codex one resolves `codex` from `PATH` only. |
 | [amlyczz/dsh-agy-link](https://github.com/amlyczz/dsh-agy-link), [darkings/dsh-agy-provider](https://github.com/darkings/dsh-agy-provider), [DavidRm1911/dsh-llm-subscription](https://github.com/DavidRm1911/dsh-llm-subscription) | Use these CLIs/subscriptions as **model providers** in DSH's model picker | Opposite architecture: there, *your DSH agent runs on that model*. Here, *that product's own agent runs the task* with its own tools, workspace and session. |
+| [NOirBRight/dsh-external-agents](https://github.com/NOirBRight/dsh-external-agents) | DSH plugin: a **control plane** for the same kind of external coding products (Codex, Claude Code, Cursor Agent, Antigravity) — a Settings section that probes/enables them, tools on the host plane, background jobs in the DSH Job Panel | The closest sibling in intent, and opposite in the one decision that changes daily use: theirs is **one-shot by design** (their ADR 0003 decides that every delegation pays for a fresh product context, and that you cannot add a line to the same Codex thread), while this plugin keeps a **persistent session per lane** you continue and can resume. See the direct comparison below. |
 | [czm15053/dsh-peer-link](https://github.com/czm15053/dsh-peer-link), [kirkchinese/claude2dsh](https://github.com/kirkchinese/claude2dsh) | Peer messaging / session import between DSH and Claude Code | Not delegation: no job, no result contract, no resume-as-a-job. |
 
 What appears to be unique here:
@@ -85,6 +86,29 @@ What appears to be unique here:
 6. **Open to any CLI, by configuration** — the three products below are hand-written adapters; every
    other agent CLI is added by describing it in `config.json` (see
    [Custom products](#custom-products)). No fork, no code change, no release.
+7. **Quota and credits are read before dispatch** — the one thing nobody else does, because it is the
+   one thing that costs money silently (see [Quota and credits](#quota-and-credits-codex)).
+
+#### Versus `dsh-external-agents`, the closest sibling
+
+Same problem, same products, and two projects that answer the central question differently. Theirs is
+documented in an ADR, so this is not a guess about their intent:
+
+| | `dsh-external-agents` | this plugin |
+|---|---|---|
+| Continuity | **one-shot, by design.** Every delegation starts a fresh product context; a new process each time | **one persistent session per lane**, continued by default and resumable after a failure |
+| What you can say | "carry out this bounded task" | "continue where you left off, but do X instead" |
+| Job records | the harness's own job registry (Job Panel) — in-memory, so a restart loses them | the durable storage domain, readable from any session after a restart or a compaction |
+| Sessions per product | one per adapter (one model) | as many lanes as you declare (product + model + role), each with its own directory |
+| Adding a product | a fixed set of four shipped adapters; a user-defined argv adapter is an explicit non-goal | any CLI by config recipe — including API-only models with no CLI at all |
+| Handover | a bounded task text | a packet on disk (inlined files, logs, images, acceptance criteria) plus collected artifacts |
+| Plan quota / credits | not covered | Codex usage is read before dispatch; a spent allowance cannot be spent silently |
+| Who sees the tools | host plane — every session in the profile | attached per session; exclusions by preset / workspace / session id |
+| **What they do better** | **a real Settings section** (probe each product, enable it, pick the default) — this plugin configures through `config.json` and shows state in the dock panel. And they support **Cursor Agent**, which this plugin does not. | |
+
+If all you want is "enable a worker, fire one task, watch it in the Job Panel", their control plane
+does that with a nicer settings surface. This plugin exists for the other case: **the same worker,
+used over and over, that has to remember.**
 
 ## Requirements
 
