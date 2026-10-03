@@ -46,6 +46,37 @@ And one thing that is not free: workers spend your subscription quota, and a spe
 back to paid credits — which is why this plugin reads the quota **before** dispatching and asks first
 (see [Quota and credits](#quota-and-credits-codex)).
 
+## Two jobs that should never have been yours
+
+Strip away the features and this plugin does two things. Both exist because a human was doing them
+badly.
+
+**1. Being the wire.** Without it, delegating means *you* do this: copy the failing output, switch to the
+other app, paste it, explain what you want, wait, copy the answer back, paste it into the project, and
+keep two windows straight in your head. That is transport work. It costs attention, it breaks focus, and
+it loses fidelity — what actually crosses over is your *paraphrase* of the error, not the error. Here the
+handover is mechanical: the task is written into a packet with the real files, log tails and acceptance
+criteria inlined, the worker runs in its own session, and the result, the artifacts and any failure come
+back as a durable record the agent can read. Nobody retypes anything.
+
+**2. Being the memory.** Nobody remembers everything — and no model does either. Any agent that compacts
+loses detail eventually, and the loss is **silent**: if nobody notices in time to put it back, the
+decision made three hours ago simply is not there any more, and the task quietly goes wrong. Keeping
+that in a human's head, or in one chat window, means one compaction, one restart or one closed tab can
+break the work.
+
+So the state of a job never lives inside a conversation. It lives on disk: the job record, the worker's
+own session id, the packet that was handed over, the artifacts that came back. Compaction and restarts
+cannot reach it, a different session can still read it, and resuming a job needs nobody to *remember*
+what the job was about.
+
+Two things this does **not** buy, said plainly:
+
+- A worker's own long thread still compacts internally. Its artifacts and its packet survive on disk;
+  its recollection does not. The plugin keeps the handover durable, not the worker's mind.
+- A packet is only as good as what was put in it, and a worker cannot ask you a question. Small talk and
+  half-formed ideas belong in DSH, where you can be vague.
+
 ## What it is
 
 A native DeepSeek Harness (DSH) plugin. It adds six tools to your sessions, plus one
