@@ -10,6 +10,42 @@
 
 ---
 
+## Why not just make Claude or GPT the brain?
+
+Because the economics are lopsided, and because "cheap and general" and "best at this particular job"
+are two different things.
+
+DeepSeek is cheap enough that **talking is the default action**: thinking out loud, arguing a design,
+reading a log, a small edit, a quick check. Routing that to a premium model pays a lot for very little.
+So the brain stays where it is — DSH holds the conversation, the plan and the context, and it is the
+thing you actually talk to.
+
+What DSH should not do is *everything*. Some work is not a question of price but of kind:
+
+- **Repo-scale autonomous work** — a 40-file refactor, running the tests, fixing what breaks. Claude Code
+  and Codex bring their own agent harness and tools, and those subscriptions are already paid for.
+- **A genuinely independent opinion.** A different model reviewing the first one's work catches what
+  self-review cannot; the same brain agreeing with itself is worth very little.
+- **Hours of work that should not sit in your conversation.** A lane runs in its own session and its own
+  directory, keeps going while you talk about something else, and comes back with artifacts and a result
+  you can inspect.
+- **A different character, or a huge context**, when the task is shaped that way.
+
+So the design is complementary, not competitive: **DSH is the orchestrator and the conversational brain;
+the external workers are specialists you hand one self-contained job at a time.** The cheap, fast
+conversation stays cheap; the expensive model is spent only where it is genuinely better.
+
+Two honest rules of thumb:
+
+- **Talk to DSH. Delegate when the work is long, self-contained, or needs another pair of eyes** — not
+  merely because another model is "smarter".
+- **A worker starts from zero.** It knows nothing about this conversation, so the packet *is* the
+  briefing: files, logs, acceptance criteria. That is a real cost, and it is why small talk stays here.
+
+And one thing that is not free: workers spend your subscription quota, and a spent Codex allowance falls
+back to paid credits — which is why this plugin reads the quota **before** dispatching and asks first
+(see [Quota and credits](#quota-and-credits-codex)).
+
 ## What it is
 
 A native DeepSeek Harness (DSH) plugin. It adds six tools to your sessions, plus one
