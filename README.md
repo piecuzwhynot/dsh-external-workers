@@ -392,6 +392,21 @@ The numbers come from Codex's rollout files (`$CODEX_HOME/sessions/**`), which *
 writes — this plugin's lanes, the Codex desktop app, and the CLI — so the reading stays current even
 when the usage happened somewhere else. Nothing is queried over the network and no credential is read.
 
+**Every reading is shown with its age, and ages honestly.** Codex writes a snapshot only when a turn
+runs, so an idle machine legitimately has an old one. Two rules follow, and both exist because the first
+version of this feature got them wrong:
+
+- The snapshot time comes from the **event's own timestamp**, never the file's mtime — Codex keeps
+  appending unrelated events (a compaction, a settings change) to an old session, which makes the file
+  look freshly written while its numbers are hours stale.
+- A window whose reading has **already reset** is reported as expired instead of as a number, and it
+  cannot gate anything. A 14-hour-old "5h 4%" is not a healthy quota, it is a window that has rolled
+  over twice — and a stale number errs in the reassuring direction, which is the worst way to err.
+
+The reset time is the authority while it is coherent with the reading (a reset *before* the reading is
+nonsense and is ignored), and the credits warning follows the slot Codex actually names
+(`rate_limit_reached_type`) — a spent weekly window says nothing about the 5-hour one.
+
 **Only Codex reports this.** Claude Code computes its own five-hour/weekly usage but renders it only in
 its TUI (nothing is cached where a plugin can read it), and the Antigravity CLI logs no numbers at all.
 For those two the bridge stays silent rather than showing an invented number — and a hard limit still
