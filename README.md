@@ -4,6 +4,8 @@
 > **Claude Code**, **Codex CLI** and **Antigravity CLI** — through their own official CLIs and your
 > existing subscription logins — with jobs that survive a restart or a context compaction.
 
+给 DeepSeek Harness 用的外部 agent 泳道：把长任务派给 Claude Code、Codex、Antigravity 三个 CLI，用你自己已有的订阅登录。每条泳道一个持久会话，作业重启和压缩都不会丢。
+
 **English** | [中文](README.zh.md)
 
 ---
