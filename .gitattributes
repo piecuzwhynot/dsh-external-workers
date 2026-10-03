@@ -1,0 +1,12 @@
+# Normalise line endings: the working copy is LF, and without this git rewrites
+# every file to CRLF on Windows — which turns the first cross-platform diff into
+# 18 whole-file changes.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.pdf binary

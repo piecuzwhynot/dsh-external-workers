@@ -1,0 +1,66 @@
+{
+  "name": "dsh-external-workers",
+  "version": "0.3.0",
+  "description": "Persistent external agent lanes for DeepSeek Harness — delegate long-running tasks to Claude Code, Codex CLI and Antigravity CLI through their own official CLIs and your existing subscription logins, with one durable session per lane and jobs that survive a restart or a context compaction.",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "plugin-src",
+    "docs",
+    "config.json",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "claude-code",
+    "codex",
+    "antigravity",
+    "agy",
+    "worker",
+    "delegation",
+    "persistent-sessions",
+    "agent-orchestration",
+    "subscription"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-storage-domain": "*",
+    "zod": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": { "optional": true },
+    "@deepseek-ai/dsh-storage-domain": { "optional": true },
+    "zod": { "optional": true }
+  }
+}

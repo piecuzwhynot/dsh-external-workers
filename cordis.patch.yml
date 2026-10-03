@@ -1,0 +1,10 @@
+# dsh-external-workers — host-plane bundle layer.
+#
+# One host row. It registers five model-facing tools into the GLOBAL layer of
+# `ctx.tools`, so every session in the process sees them regardless of which
+# agent preset it mounts. No preset, no injection, no persona is touched.
+#
+# It publishes no service, so it needs no `isolate` realm.
+- insert:
+    - id: external-workers
+      name: 'dsh-external-workers'
