@@ -83,13 +83,32 @@ Two rules keep that honest, because the naive version of the idea does not hold:
   "the other agent still remembers" — it comes from the durable record that every handover writes. Think
   of the sessions as caches and the disk as the source of truth: compaction is a cache eviction, and
   recovery is going back to the source.
-- **More workers lowers the chance of an unrecoverable loss, and raises the chance of two lanes holding
-  two versions of the truth.** That is the ordinary cost of replication. A single source of truth is what
-  keeps redundancy from turning into disagreement.
+- **More workers lowers the chance of an unrecoverable loss, and can raise the chance of two lanes
+  holding two versions of the truth — but that is a property of the arrangement, not of the count.**
+  Two things remove the risk entirely, and both are choices you make:
+
+  1. **One shared substrate.** Point every lane at the same hand-off directory (or the same project
+     checkout) and have each lane write its results there. Then there are no private copies to disagree:
+     every session is a view onto one record, and a lane that lost its context can be told "read these
+     files" and be whole again.
+  2. **One writer per domain.** Because each lane owns a different part of the work, two lanes are not
+     writing the same facts — they are writing *different* facts into the same place. That is what makes
+     the shared record converge instead of conflict.
+
+  What remains under that arrangement is smaller and worth naming anyway: **discipline** (a lane that
+  does not write down what it did leaves no trace for the others to recover) and **staleness** (a shared
+  file can be present but old, so what matters is knowing what is *new* since you last read). The job
+  ledger helps with both, because it is timestamped and it records what was handed over and what came
+  back — but it starts working only once the writing happens.
 
 What is *not* automated yet, said plainly: noticing that a worker's own session compacted and re-briefing
 it is still a manual step today (`resume_external_job`, or a fresh packet). The plugin guarantees the
-state is recoverable; it does not yet watch for the moment recovery is needed.
+state is recoverable; it does not yet watch for the moment recovery is needed. And the shape of the
+recovery is entirely up to how you set the lanes up — **the plugin moves the work and keeps the record;
+the shared directory that makes one lane's work readable by another is something you point them at.**
+Give every lane the same project (or the same hand-off directory) as its working context and you get the
+arrangement described above: not several agents comparing memories, but several agents reading one
+record.
 
 Two things this does **not** buy, said plainly:
 
