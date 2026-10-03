@@ -70,6 +70,27 @@ own session id, the packet that was handed over, the artifacts that came back. C
 cannot reach it, a different session can still read it, and resuming a job needs nobody to *remember*
 what the job was about.
 
+**And the loss becomes something a machine can act on, which is the part a human cannot do.** You cannot
+see what a summarizer quietly dropped — what you notice is only that an agent got vaguer. A machine can
+at least see *that* a compaction happened, and then go and re-read the state from somewhere durable and
+re-brief whoever lost it. Compaction stops being an invisible hole and becomes an event with a recovery
+path.
+
+Two rules keep that honest, because the naive version of the idea does not hold:
+
+- **The workers are not copies of each other, they are different partitions.** A lane working on one part
+  of a project never knew what another lane was doing unless it was told. So recovery does not come from
+  "the other agent still remembers" — it comes from the durable record that every handover writes. Think
+  of the sessions as caches and the disk as the source of truth: compaction is a cache eviction, and
+  recovery is going back to the source.
+- **More workers lowers the chance of an unrecoverable loss, and raises the chance of two lanes holding
+  two versions of the truth.** That is the ordinary cost of replication. A single source of truth is what
+  keeps redundancy from turning into disagreement.
+
+What is *not* automated yet, said plainly: noticing that a worker's own session compacted and re-briefing
+it is still a manual step today (`resume_external_job`, or a fresh packet). The plugin guarantees the
+state is recoverable; it does not yet watch for the moment recovery is needed.
+
 Two things this does **not** buy, said plainly:
 
 - A worker's own long thread still compacts internally. Its artifacts and its packet survive on disk;
