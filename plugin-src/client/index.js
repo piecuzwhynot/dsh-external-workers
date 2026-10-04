@@ -62,7 +62,7 @@ const TEXT = {
     continueAnyway: '我确认，继续', spendCredits: '我确认，用 credits', newSession: '开新会话（不续接）',
     defaultModel: '(产品默认)', noRole: '(未分工)', none: '无',
     task: '任务', artifacts: '产物', error: '错误', stderr: 'stderr 尾部', result: '完整结果', paths: '文件位置',
-    ran: '跑了', ago: '前', justNow: '刚刚',
+    ran: '跑了', ago: ' 前', justNow: '刚刚',
     attempts: '执行', exitCode: '退出码', all: '全部', viewJobs: '看它的作业', empty: '还没有作业。',
     loading: '读取中…', feedError: '取数据失败', continues: '续接自', openHint: '点任意一行看完整内容 · Esc 或右上角关闭',
   },
