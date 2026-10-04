@@ -379,7 +379,7 @@ no lane id, and readers fall back to the product name; nothing in the ledger is 
 
 ```json
 "workers": {
-  "claude": { "enabled": true, "cliPath": null, "permissionMode": "acceptEdits", "extraArgs": [] },
+  "claude": { "enabled": true, "cliPath": null, "permissionMode": "bypassPermissions", "extraArgs": [] },
   "gpt":    { "enabled": true, "cliPath": null, "sandboxMode": "workspace-write", "approvalPolicy": "never", "extraArgs": [] },
   "google": { "enabled": true, "cliPath": null, "extraArgs": [] }
 }
@@ -562,12 +562,18 @@ spend is never silent and that the *next* task cannot start on credits without y
   lists back into the job record.
 - **Real model discovery.** `worker_config(action: "models")` reads the products themselves — Codex's
   `models_cache.json`, `agy models`, Claude's documented aliases — instead of a hardcoded list.
+- **Refusals are surfaced.** Each CLI reports the tools it soft-denied, and the bridge records every one
+  of them on the job — in `check_external_job`, in the completion notice and in the panel. A job that
+  says `completed` can still tell you its worker was blocked and may have worked around the block.
 
 ## Limitations
 
-- Each worker can only do what its own CLI is permitted to do. Anthropic's `acceptEdits`, Codex's
+- Each worker can only do what its own CLI is permitted to do. Claude's `permissionMode`, Codex's
   sandbox and agy's permission grants are all different gates; the bridge reports what it is told
-  rather than pretending. See the permissions section in the usage guide.
+  rather than pretending. Because a refusal is not an error to these CLIs — the turn can end
+  successfully with the tool never having run — every refused tool call is recorded on the job and
+  surfaced in the notice and in the panel, so a "completed" job can still tell you it was blocked.
+  See the permissions section in the usage guide.
 - Lanes run in **their own** directory (`~/.dsh/workers/<lane id>`), not in your project. Moving
   artifacts into a project is a deliberate second step (or point `cwd` at it — at the cost of
   per-directory session continuity).

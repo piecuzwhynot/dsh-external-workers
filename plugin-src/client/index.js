@@ -42,6 +42,7 @@ const TEXT = {
     running: '运行中', queued: '排队', completed: '完成', failed: '失败', blocked: '受阻', retryable: '可重试', canceled: '已取消',
     lane: '泳道', role: '分工', model: '请求模型', actual: '实际跑的', state: '状态', session: '会话', cwd: '工作目录', jobsOf: '个作业', lastModel: '上次实际用的',
     quota: '额度', quotaNotReported: '该产品不上报额度', quotaCredits: '将用 credits', creditsSpent: '⚠️ 这次花了 credits',
+    denials: '⚠️ 被拒绝的工具调用', denialsHint: '它想做的事被权限挡了 —— 结果可能是绕过去的替代品，不是真东西。',
     settingsTitle: '外部 worker', warnAt: '预警阈值', product: '产品', save: '保存', clear: '清空', remove: '删除',
     addLane: '新建泳道', create: '创建', configFile: '配置文件', workspace: '工作目录',
     settingsHint: '改了立刻生效，不用重启；新建的泳道下一次派活就会开自己的会话。',
@@ -62,6 +63,7 @@ const TEXT = {
     running: 'running', queued: 'queued', completed: 'done', failed: 'failed', blocked: 'blocked', retryable: 'retryable', canceled: 'canceled',
     lane: 'lane', role: 'role', model: 'requested', actual: 'ran on', state: 'state', session: 'session', cwd: 'working dir', jobsOf: 'jobs', lastModel: 'last ran on',
     quota: 'quota', quotaNotReported: 'not reported by this product', quotaCredits: 'will spend credits', creditsSpent: '⚠️ this run spent credits',
+    denials: '⚠️ refused tool calls', denialsHint: 'It tried to do something and permission blocked it — the result may be a workaround, not the real thing.',
     settingsTitle: 'External workers', warnAt: 'warn at', product: 'product', save: 'save', clear: 'clear', remove: 'remove',
     addLane: 'Add a lane', create: 'create', configFile: 'config file', workspace: 'workspace',
     settingsHint: 'Changes apply immediately, no restart. A new lane opens its own session on its first delegation.',
@@ -482,6 +484,12 @@ function JobDetail(props) {
       job.parentJobId ? field(text, 'continues', job.parentJobId) : null,
     ),
   ];
+  if (Array.isArray(job.denials) && job.denials.length > 0) {
+    blocks.push(h('div', { key: 'denials', style: Object.assign({}, box, { marginBottom: 8, borderColor: 'var(--dsw-alias-state-warn-primary)' }) },
+      h('div', { style: { color: 'var(--dsw-alias-state-warn-primary)', fontWeight: 600 } }, `${text.denials} (${job.denials.length})`),
+      h('div', { style: { color: 'var(--dsw-alias-label-secondary)' } }, text.denialsHint),
+      ...job.denials.map((item, index) => pre(item, `d${index}`))));
+  }
   if (job.lastError) {
     blocks.push(h('div', { key: 'error', style: Object.assign({}, box, { marginBottom: 8, borderColor: 'var(--dsw-alias-state-error-primary)' }) },
       h('div', { style: { color: 'var(--dsw-alias-state-error-primary)', fontWeight: 600 } }, `${text.error}${job.failureKind ? ` (${job.failureKind})` : ''}`),

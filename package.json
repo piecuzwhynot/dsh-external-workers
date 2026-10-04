@@ -1,7 +1,7 @@
 {
   "name": "dsh-external-workers",
-  "version": "0.3.0",
-  "description": "Persistent external agent lanes for DeepSeek Harness — delegate long-running tasks to Claude Code, Codex CLI and Antigravity CLI through their own official CLIs and your existing subscription logins, with one durable session per lane and jobs that survive a restart or a context compaction.",
+  "version": "0.3.1",
+  "description": "Persistent external agent lanes for DeepSeek Harness â€” delegate long-running tasks to Claude Code, Codex CLI and Antigravity CLI through their own official CLIs and your existing subscription logins, with one durable session per lane and jobs that survive a restart or a context compaction.",
   "type": "module",
   "main": "lib/index.js",
   "files": [

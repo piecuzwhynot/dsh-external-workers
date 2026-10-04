@@ -326,13 +326,36 @@ worker 只能做它自己 CLI 允许的事。这是三道不同的闸，而且�
 
 | 值 | 效果 |
 |---|---|
-| `acceptEdits`（默认） | 读文件、改文件。需要审批的 shell 命令在 print 模式下被软拒绝。 |
-| `bypassPermissions` | 全信任：无人值守，什么都能跑。 |
+| `bypassPermissions`（默认） | 全信任：无人值守，什么都能跑。 |
+| `acceptEdits` | 读文件、改文件。需要审批的 shell 命令在 print 模式下被软拒绝。 |
 | `plan` / `manual` / `dontAsk` / `auto` | Claude Code 的其它模式。 |
 
 ```json
 "workers": { "claude": { "permissionMode": "bypassPermissions" } }
 ```
+
+**为什么默认给的是"全信任"那个。** print 模式下没有人能回答审批弹窗，所以除了 bypass 之外的每一种模式，
+都会把 worker 真正需要的 shell 命令软拒绝掉。`acceptEdits` 看着更安全，其实不是：在 Windows 上
+worker 的 shell 工具叫 `PowerShell`，允许规则得写成 `PowerShell(node:*)` 而不是 `Bash(node:*)`；
+而且前缀规则怎么都会漏，因为 worker 习惯把好几件事拼成一条命令（`cd X; node …`、`$s = Get-Content …`）。
+对着真 CLI 实测，`acceptEdits` 下是：
+
+```
+permission_denials: [{"tool_name":"PowerShell","tool_input":{"command":"& \"C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe\" --version"}}]
+is_error: false   subtype: success
+```
+
+命令根本没跑，这一轮却仍然被记为成功。换成 `bypassPermissions` 之后同一次运行报
+`permission_denials: []`，Blender 正常应答。
+
+**被拒绝永远不会是无声的。** 不管你选哪种模式，CLI 报上来的每一次工具拒绝都会记在作业上、
+由 `check_external_job` 打印出来、出现在完成通知里，并列在面板的作业详情中 ——
+因为"完成了"和"绕过了拒绝才算完成"完全是两回事。如果你把模式收紧，一定要看那份列表：
+一个被拒绝的作业照样可能以 `completed` 收尾，而它的结果是 worker 自己编的替代品。
+
+`bypassPermissions` 的意思说白了就是：**这个 worker 可以不问一声就在这台机器上跑任何东西。**
+和 `agy` 的 `--dangerously-skip-permissions` 是同一个取舍（见本节后面）。想限制住 worker 就设
+`acceptEdits`，代价是它的一部分命令会被拒绝。
 
 ### Codex —— `workers.gpt.sandboxMode` / `approvalPolicy`
 
@@ -388,6 +411,7 @@ worker 只能做它自己 CLI 允许的事。这是三道不同的闸，而且�
 | `blocked / needs-login` | CLI 装了但没登录 | `claude auth login` / `codex login` / 跑一次 `agy` |
 | `blocked / cli-missing` | 找不到二进制 | 安装它，或钉死 `workers.<id>.cliPath` |
 | 作业 `retryable`，原因提到 permission | worker 要用的工具被它的 CLI 拒了 | 按第 6 节授权，然后 `resume_external_job` |
+| 作业 `completed`，但列表里有"被拒绝的工具调用" | CLI 软拒绝了某个工具，worker 绕过它（或者说它做不到） | 先看那条拒绝，再按第 6 节授权、或放宽模式 —— 结果可能不是你要的那个东西 |
 | worker"成功"了但结果是空的 | 产品报了成功却没有输出（agy 的典型行为） | 桥已经把它标成失败并附上真实原因 —— 读 `lastError` |
 | worker 用错语言回答 | 它跟着任务包的语言走 | 在任务里说明你要哪种语言 |
 | 重启后作业不见了？ | 没丢 —— 账本在磁盘上 | 任何会话里 `check_external_job` |

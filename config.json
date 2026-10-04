@@ -17,7 +17,7 @@
     "claude": {
       "enabled": true,
       "cliPath": null,
-      "permissionMode": "acceptEdits",
+      "permissionMode": "bypassPermissions",
       "extraArgs": []
     },
     "gpt": {
@@ -138,7 +138,7 @@
     "scope.mode": "per-session (default) | off (no session gets the tools) | global (EVERY session gets them — rarely what you want).",
     "excludeWorkspaces": "Exact cwd match, case-insensitive, separators normalised.",
     "cliPath": "null = auto-resolve (newest install, then PATH). Set an absolute path to pin a binary.",
-    "claude.permissionMode": "default | acceptEdits | auto | bypassPermissions | manual | dontAsk | plan. acceptEdits lets the worker read and edit files; shell commands it cannot get approval for are soft-denied in print mode. Use bypassPermissions only if you accept full trust.",
+    "claude.permissionMode": "default | acceptEdits | auto | bypassPermissions | manual | dontAsk | plan. Shipped as bypassPermissions, for the same reason the google example carries --dangerously-skip-permissions: in print mode there is nobody to answer a permission prompt, and every mode short of a bypass soft-denies the shell commands a worker actually needs. acceptEdits looks safer and is not: the worker is refused, the CLI still reports success, and the job quietly ends as completed with a workaround instead of the real result — so set a stricter mode only together with the refusal surfacing below. What bypassPermissions means, plainly: this worker can run anything on this machine without asking. The refusal is not reported as an error by the CLI; the bridge records every refused tool call on the job and shows it in the completion notice and in the panel.",
     "gpt.sandboxMode": "read-only | workspace-write | danger-full-access, passed per call as -c sandbox_mode=...",
     "workers.<id>.extraArgs": "Extra CLI arguments appended to every delegation. E.g. google: [\"--dangerously-skip-permissions\"] to drop agy's permission gate entirely.",
     "google permissions": "agy soft-denies tools that headless mode cannot prompt for, and still reports status SUCCESS. Grant what the worker needs in the Antigravity shared config (~/.gemini/config/config.json) under userSettings.globalPermissionGrants.allow — write_file(<absolute dir>) and command(regex:...) forms. See docs/USAGE.md.",

@@ -339,7 +339,7 @@ Release 产物由 `node scripts/release.mjs` 生成；如果 tarball 和工作�
 
 ```json
 "workers": {
-  "claude": { "enabled": true, "cliPath": null, "permissionMode": "acceptEdits", "extraArgs": [] },
+  "claude": { "enabled": true, "cliPath": null, "permissionMode": "bypassPermissions", "extraArgs": [] },
   "gpt":    { "enabled": true, "cliPath": null, "sandboxMode": "workspace-write", "approvalPolicy": "never", "extraArgs": [] },
   "google": { "enabled": true, "cliPath": null, "extraArgs": [] }
 }
@@ -506,11 +506,17 @@ credits 的提醒跟着 Codex 自己点名的那一格（`rate_limit_reached_typ
 - **产物走约定。** worker 把交付物写到 `jobs/<id>/out/`，桥会把它们列回作业记录。
 - **真实模型发现。** `worker_config(action: "models")` 直接从产品本身读 —— Codex 的
   `models_cache.json`、`agy models`、Claude 文档化的别名 —— 而不是写死的清单。
+- **拒绝会被摊开说。** 每个 CLI 都会报告它软拒绝了哪些工具，桥把每一次都记在作业上 ——
+  `check_external_job` 里、完成通知里、面板里都能看到。一个写着 `completed` 的作业，
+  照样会告诉你它的 worker 被挡住了、结果可能是绕过去的。
 
 ## 已知限制
 
-- worker 只能做它自己 CLI 允许它做的事。Anthropic 的 `acceptEdits`、Codex 的沙箱、agy 的权限授权是
-  三道不同的闸；桥会**如实报告**，不会假装成功。见用法文档里的权限一节。
+- worker 只能做它自己 CLI 允许它做的事。Claude 的 `permissionMode`、Codex 的沙箱、agy 的权限授权是
+  三道不同的闸；桥会**如实报告**，不会假装成功。而且这些 CLI 并不把"拒绝"当成错误 ——
+  一轮可能以成功收尾，而那个工具从头到尾没跑过。所以每一次被拒绝的工具调用都会记在作业上，
+  并出现在完成通知和面板里：一个 `completed` 的作业照样能告诉你它被挡住了。
+  见用法文档里的权限一节。
 - 泳道在**它们自己的**目录里干活（`~/.dsh/workers/<lane id>`），不在你的项目里。
   把产物搬进项目是有意的第二步（或者用 `cwd` 指过去 —— 代价是按目录的会话连续性）。
 - 不做自治路由。工具是显式的，由统筹者决定。

@@ -341,13 +341,39 @@ per **product**: a lane has no permission settings of its own — every lane of 
 
 | Value | Effect |
 |---|---|
-| `acceptEdits` *(default)* | Reads files and edits them. Shell commands that would need approval are soft-denied in print mode. |
-| `bypassPermissions` | Full trust: everything runs unattended. |
+| `bypassPermissions` *(default)* | Full trust: everything runs unattended. |
+| `acceptEdits` | Reads files and edits them. Shell commands that would need approval are soft-denied in print mode. |
 | `plan`, `manual`, `dontAsk`, `auto` | Other Claude Code modes. |
 
 ```json
 "workers": { "claude": { "permissionMode": "bypassPermissions" } }
 ```
+
+**Why the shipped default is the trusting one.** In print mode there is nobody to answer a permission
+prompt, so every mode short of a bypass soft-denies the shell commands a worker actually needs.
+`acceptEdits` looks safer and is not: on Windows the worker's shell tool is called `PowerShell`, an
+allow rule has to be written `PowerShell(node:*)` rather than `Bash(node:*)`, and prefix rules kept
+missing anyway because a worker composes one command out of several (`cd X; node …`,
+`$s = Get-Content …`). Measured against the real CLI, with `acceptEdits`:
+
+```
+permission_denials: [{"tool_name":"PowerShell","tool_input":{"command":"& \"C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe\" --version"}}]
+is_error: false   subtype: success
+```
+
+The command never ran and the turn was still filed as a success. With `bypassPermissions` the same run
+reports `permission_denials: []` and Blender answers normally.
+
+**A refusal is never silent.** Whatever mode you choose, every refused tool call the CLI reports is
+recorded on the job, printed by `check_external_job`, shown in the completion notice, and listed in the
+panel's job view — because "completed" and "completed by working around a refusal" are very different
+things. If you tighten the mode, read that list: a job that was refused can still end as `completed`
+with a result the worker invented instead of the one you asked for.
+
+What `bypassPermissions` means, plainly: **this worker can run anything on this machine without
+asking.** It is the same trade-off as `agy`'s `--dangerously-skip-permissions` (section 6, below).
+Set `acceptEdits` if you want the worker confined, and accept that some of its commands will be
+refused.
 
 ### Codex — `workers.gpt.sandboxMode` / `approvalPolicy`
 
@@ -405,6 +431,7 @@ as a blocker rather than silently skipped.
 | `blocked / needs-login` | CLI installed but not signed in | `claude auth login` / `codex login` / run `agy` once |
 | `blocked / cli-missing` | Binary not found | Install it, or pin `workers.<id>.cliPath` |
 | Job `retryable`, reason mentions permission | The worker asked for a tool its CLI refuses | Grant it (section 6) and `resume_external_job` |
+| Job `completed`, but "refused tool calls" is listed | The CLI soft-denied a tool and the worker worked around it (or said it could not) | Read the refusals, then grant it (section 6) or relax the mode — the result may not be the real thing |
 | Worker "succeeds" but the result is empty | The product reported success with no output (classic agy behaviour) | The bridge already marks it failed with the real reason — read `lastError` |
 | Worker answers in the wrong language | It follows the packet's language | Say which language you want in the task |
 | Job vanished after a restart? | It did not — the ledger is on disk | `check_external_job` from any session |
