@@ -455,10 +455,14 @@ rows:
     asked for, **the model it actually ran last** (read back from the product itself), state, that
     lane's **own** session id, and its directory `~/.dsh/workers/<lane id>`, plus how many jobs it has
     (and a shortcut to that lane's jobs).
-  - **Jobs** — filter chips per lane, then one row per job (status, product, **lane**, **model +
-    effort**, job id, elapsed, artifact count, task, and the error if it failed). **Click any row to
-    open that job in full**: the lane, the *complete* result text, every artifact path, the raw error,
-    the stderr tail, and the on-disk paths — nothing truncated.
+  - **Jobs** — filter chips per lane, then one row per job: **how long ago first** (a fixed-width pink
+    column, with the exact time to the second on hover), then status dot, product, **lane**, status,
+    **model + effort**, job id with `ran X` (how long that run actually took) and the artifact count,
+    and underneath the task and the error if it failed. Rows are ordered **purely by time, newest
+    first** — not grouped by status, which used to push a job that had just finished underneath an old
+    one that merely happened to be retryable. **Click any row to open that job in full**: the lane, the
+    *complete* result text, every artifact path, the raw error, the stderr tail, and the on-disk
+    paths — nothing truncated.
 - The drawer has its **own scroll container**, and closes three ways: the ✕ button, `Esc`, or the same
   `details` button.
 - It refreshes itself every 6 seconds while a session is open; the data is read-only JSON from the

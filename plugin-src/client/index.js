@@ -35,6 +35,14 @@ const COLORS = {
   canceled: 'var(--dsw-alias-label-secondary)',
 };
 
+// The age column. The theme publishes no pink/rose token (only bg / border /
+// brand / label / state-error / state-success / state-warn), and the age has to
+// be distinguishable from both the secondary label text and the status colours —
+// warn and error are already taken by `retryable` and `failed` on the same row.
+// A literal is therefore deliberate, chosen to stay legible on the dark surface
+// this panel renders on. Change this one constant to restyle the whole column.
+const AGE_COLOR = '#ff7ab8';
+
 const TEXT = {
   zh: {
     title: '外部 worker', detail: '详情', close: '关闭', back: '返回',
@@ -54,6 +62,7 @@ const TEXT = {
     continueAnyway: '我确认，继续', spendCredits: '我确认，用 credits', newSession: '开新会话（不续接）',
     defaultModel: '(产品默认)', noRole: '(未分工)', none: '无',
     task: '任务', artifacts: '产物', error: '错误', stderr: 'stderr 尾部', result: '完整结果', paths: '文件位置',
+    ran: '跑了', ago: '前', justNow: '刚刚',
     attempts: '执行', exitCode: '退出码', all: '全部', viewJobs: '看它的作业', empty: '还没有作业。',
     loading: '读取中…', feedError: '取数据失败', continues: '续接自', openHint: '点任意一行看完整内容 · Esc 或右上角关闭',
   },
@@ -75,6 +84,7 @@ const TEXT = {
     continueAnyway: 'continue anyway', spendCredits: 'spend credits', newSession: 'new session (do not continue)',
     defaultModel: '(product default)', noRole: '(no role)', none: 'none',
     task: 'task', artifacts: 'artifacts', error: 'error', stderr: 'stderr tail', result: 'full result', paths: 'files',
+    ran: 'ran', ago: ' ago', justNow: 'just now',
     attempts: 'attempts', exitCode: 'exit code', all: 'all', viewJobs: 'view its jobs', empty: 'No jobs yet.',
     loading: 'loading…', feedError: 'feed failed', continues: 'continues', openHint: 'click any row for the full content · Esc or the ✕ closes this',
   },
@@ -144,6 +154,27 @@ function duration(job) {
   const seconds = Math.max(0, Math.round((to - from) / 1000));
   if (seconds < 60) return `${seconds}s`;
   return `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, '0')}s`;
+}
+
+/**
+ * How long ago the job was created — the number the row leads with.
+ *
+ * This is NOT `duration`: duration is how long the run took (40m00s for a job
+ * that was killed at forty minutes), and it says nothing about whether that
+ * happened five minutes or five days ago. Both are on the row, so the run length
+ * is labelled (`ran 40m00s`) to keep the two from reading as duplicates.
+ */
+function age(createdAt, text) {
+  if (typeof createdAt !== 'number' || createdAt <= 0) return '';
+  const seconds = Math.max(0, Math.round((Date.now() - createdAt) / 1000));
+  const pad = (value) => String(value).padStart(2, '0');
+  const body = seconds < 10 ? text.justNow
+    : seconds < 60 ? `${seconds}s`
+      : seconds < 3600 ? `${Math.floor(seconds / 60)}m${pad(seconds % 60)}s`
+        : seconds < 86400 ? `${Math.floor(seconds / 3600)}h${pad(Math.floor((seconds % 3600) / 60))}m`
+          : `${Math.floor(seconds / 86400)}d${Math.floor((seconds % 86400) / 3600)}h`;
+  // "just now" is already a phrase; a bare number needs the suffix to read as a time.
+  return seconds < 10 ? body : `${body}${text.ago}`;
 }
 
 /** "gpt-6.1-sol (high)" — prefer the model the product says it actually ran. */
@@ -404,12 +435,13 @@ function JobsTab(text, payload, state) {
     }, name === null ? text.all : name));
   }
 
-  const order = { running: 0, queued: 1, retryable: 2, blocked: 3, failed: 4, completed: 5, canceled: 6 };
+  // Newest first, and nothing else. This list used to group by status (running,
+  // then retryable, then failed, then done), which meant a job that had just
+  // finished sank below an old one that happened to be retryable — you could not
+  // read it as a timeline. The status is already shown on every row, and the
+  // lane chips are how you narrow it down.
   const rows = [];
-  for (const job of jobs.slice().sort((a, b) => {
-    const delta = (order[a.status] !== undefined ? order[a.status] : 9) - (order[b.status] !== undefined ? order[b.status] : 9);
-    return delta !== 0 ? delta : (b.createdAt || 0) - (a.createdAt || 0);
-  })) {
+  for (const job of jobs.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))) {
     rows.push(h('button', {
       key: job.id,
       type: 'button',
@@ -430,12 +462,19 @@ function JobsTab(text, payload, state) {
       },
     },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+        // The age leads the row: this list is read as a timeline, so "when" is the
+        // first thing to see. A fixed width keeps the status dots in one column
+        // even though the strings differ in length.
+        h('span', {
+          title: clock(job.createdAt),
+          style: { color: AGE_COLOR, fontSize: 11, flex: '0 0 auto', minWidth: 52, fontVariantNumeric: 'tabular-nums' },
+        }, age(job.createdAt, text)),
         dot(COLORS[job.status] !== undefined ? COLORS[job.status] : 'var(--dsw-alias-label-secondary)'),
         h('strong', { style: { color: 'var(--dsw-alias-label-primary)' } }, job.worker),
         h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 11, border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 999, padding: '0 6px' } }, job.lane || job.worker),
         h('span', { style: { color: COLORS[job.status] !== undefined ? COLORS[job.status] : 'inherit' } }, label(text, job.status)),
         modelChip(job) === null ? null : h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } }, modelChip(job)),
-        h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 11 } }, `#${job.id} · ${duration(job)}${Array.isArray(job.artifacts) && job.artifacts.length > 0 ? ` · ${job.artifacts.length} ${text.artifacts}` : ''}`),
+        h('span', { style: { color: 'var(--dsw-alias-label-secondary)', fontSize: 11 } }, `#${job.id}${duration(job) === '' ? '' : ` · ${text.ran} ${duration(job)}`}${Array.isArray(job.artifacts) && job.artifacts.length > 0 ? ` · ${job.artifacts.length} ${text.artifacts}` : ''}`),
       ),
       h('div', { style: { color: 'var(--dsw-alias-label-secondary)', marginTop: 2, overflowWrap: 'anywhere' } }, job.task),
       job.lastError ? h('div', { style: { color: 'var(--dsw-alias-state-error-primary)', marginTop: 2, overflowWrap: 'anywhere' } }, job.lastError) : null,
